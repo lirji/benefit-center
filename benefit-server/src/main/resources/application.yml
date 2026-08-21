@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: benefit-center
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  datasource:
+    url: ${BENEFIT_DB_URL:jdbc:mysql://localhost:3306/benefit_center?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    username: ${BENEFIT_DB_USER:benefit}
+    password: ${BENEFIT_DB_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${BENEFIT_KAFKA_BOOTSTRAP:localhost:9092}
+
+server:
+  port: ${SERVER_PORT:8083}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+benefit:
+  cell:
+    id: ${BENEFIT_CELL_ID:cell-0}
+  channel:
+    # 双开关防误连：全局生产渠道总闸和具体 HTTP adapter 必须同时为 true。
+    real-enabled: ${BENEFIT_REAL_CHANNEL_ENABLED:false}
+    http:
+      enabled: ${BENEFIT_HTTP_CHANNEL_ENABLED:false}
+      code: ${BENEFIT_HTTP_CHANNEL_CODE:UNCONFIGURED}
+      base-url: ${BENEFIT_HTTP_CHANNEL_BASE_URL:http://localhost:18080}
+      secret: ${BENEFIT_HTTP_CHANNEL_SECRET:disabled}
+      connect-timeout-ms: ${BENEFIT_HTTP_CHANNEL_CONNECT_TIMEOUT_MS:3000}
+      read-timeout-ms: ${BENEFIT_HTTP_CHANNEL_READ_TIMEOUT_MS:5000}
+  security:
+    dev-mode: ${BENEFIT_SECURITY_DEV_MODE:false}
+    jwk-set-uri: ${BENEFIT_JWK_SET_URI:http://localhost:8000/.well-known/jwks}
+    audience-tenants: ${BENEFIT_AUDIENCE_TENANTS:}
+  callback:
+    secrets: ${BENEFIT_CALLBACK_SECRETS:}
+  worker:
+    enabled: ${BENEFIT_WORKER_ENABLED:false}
+    tenants: ${BENEFIT_WORKER_TENANTS:}
+    batch-size: ${BENEFIT_WORKER_BATCH_SIZE:100}
+    delay-ms: ${BENEFIT_WORKER_DELAY_MS:1000}
+    lease-duration: ${BENEFIT_WORKER_LEASE_DURATION:PT30S}
+  outbox:
+    enabled: ${BENEFIT_OUTBOX_ENABLED:false}
+    batch-size: ${BENEFIT_OUTBOX_BATCH_SIZE:100}
+    delay-ms: ${BENEFIT_OUTBOX_DELAY_MS:1000}
+    max-attempts: ${BENEFIT_OUTBOX_MAX_ATTEMPTS:10}
+  kafka:
+    fulfillment-topic: ${BENEFIT_FULFILLMENT_TOPIC:benefit.fulfillment-event.v1}
+    remediation-topic: ${BENEFIT_REMEDIATION_TOPIC:benefit.remediation.result.v1}
+  award-intent:
+    consumer-enabled: ${BENEFIT_AWARD_INTENT_CONSUMER_ENABLED:false}
+    topic: ${BENEFIT_AWARD_INTENT_TOPIC:benefit.award-intent.v1}
+    consumer-group: ${BENEFIT_AWARD_INTENT_CONSUMER_GROUP:benefit-award-intent-v1}
+  remediation:
+    consumer-enabled: ${BENEFIT_REMEDIATION_CONSUMER_ENABLED:false}
+    command-topic: ${BENEFIT_REMEDIATION_COMMAND_TOPIC:benefit.remediation.command.v1}
+    consumer-group: ${BENEFIT_REMEDIATION_CONSUMER_GROUP:benefit-remediation-v1}
+    auto-enabled: ${BENEFIT_REMEDIATION_AUTO_ENABLED:false}

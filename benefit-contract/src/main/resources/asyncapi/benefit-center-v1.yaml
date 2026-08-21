@@ -1,0 +1,170 @@
+asyncapi: 2.6.0
+info:
+  title: Enterprise Benefit Center Events
+  version: 1.0.0
+  description: |
+    Kafka contracts are at-least-once. Producers use transactional outbox and consumers deduplicate by
+    (tenantId, consumerGroup, eventId). Unknown major schema versions must be rejected or sent to a DLQ.
+defaultContentType: application/json
+channels:
+  benefit.award-intent.v1:
+    description: Asynchronous equivalent of POST /openapi/v1/award-orders.
+    subscribe:
+      operationId: consumeAwardIntent
+      message: { $ref: '#/components/messages/AwardIntentEnvelope' }
+  benefit.fulfillment-event.v1:
+    description: Expected, internal-ledger, and provider fulfillment facts used by queries and reconciliation.
+    publish:
+      operationId: publishFulfillmentFact
+      message: { $ref: '#/components/messages/FulfillmentEnvelope' }
+  benefit.remediation.command.v1:
+    description: Approved remediation commands from recon-platform.
+    subscribe:
+      operationId: consumeRemediationCommand
+      message: { $ref: '#/components/messages/RemediationCommandEnvelope' }
+  benefit.remediation.result.v1:
+    description: Monotonic remediation outcomes returned to recon-platform.
+    publish:
+      operationId: publishRemediationResult
+      message: { $ref: '#/components/messages/RemediationResultEnvelope' }
+components:
+  messages:
+    AwardIntentEnvelope:
+      name: AwardIntentEnvelope
+      messageId: AwardIntent
+      correlationId: { location: '$message.payload#/traceId' }
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType: { const: AWARD_INTENT }
+              payload: { $ref: '#/components/schemas/AwardIntent' }
+    FulfillmentEnvelope:
+      name: FulfillmentEnvelope
+      messageId: FulfillmentEvent
+      correlationId: { location: '$message.payload#/traceId' }
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType:
+                enum: [FULFILLMENT_EXPECTED, FULFILLMENT_INTERNAL, FULFILLMENT_PROVIDER]
+              payload: { $ref: '#/components/schemas/FulfillmentEvent' }
+    RemediationCommandEnvelope:
+      name: RemediationCommandEnvelope
+      messageId: RemediationCommand
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType: { const: REMEDIATION_COMMAND }
+              payload: { $ref: '#/components/schemas/RemediationCommand' }
+    RemediationResultEnvelope:
+      name: RemediationResultEnvelope
+      messageId: RemediationResult
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType: { enum: [REMEDIATION_DISPATCHED, REMEDIATION_RESULT] }
+              payload: { $ref: '#/components/schemas/RemediationResult' }
+  schemas:
+    Envelope:
+      type: object
+      additionalProperties: false
+      required: [eventId, eventType, schemaVersion, tenantId, occurredAt, partitionKey, payload]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 128 }
+        eventType: { type: string, minLength: 1, maxLength: 64 }
+        schemaVersion: { type: string, pattern: '^1(\\.[0-9]+)?$' }
+        tenantId: { type: string, minLength: 1, maxLength: 64 }
+        occurredAt: { type: string, format: date-time }
+        traceId: { type: string, maxLength: 128 }
+        partitionKey: { type: string, minLength: 1, maxLength: 256 }
+        payload: { type: object }
+    AwardIntent:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, sourceSystem, sourceRequestId, recipientRef, partialPolicy, items]
+      properties:
+        schemaVersion: { const: '1.0' }
+        sourceSystem: { type: string, maxLength: 64 }
+        sourceRequestId: { type: string, maxLength: 128 }
+        sourceBusinessNo: { type: string, maxLength: 128 }
+        recipientRef: { type: string, maxLength: 256 }
+        partialPolicy: { const: BEST_EFFORT }
+        decision:
+          type: object
+          properties:
+            decisionId: { type: string }
+            activityId: { type: string }
+            activityVersion: { type: integer, minimum: 1 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/AwardItemIntent' }
+        trace:
+          type: object
+          additionalProperties: { type: string }
+    AwardItemIntent:
+      type: object
+      additionalProperties: false
+      required: [clientItemId, benefitSkuId, benefitType, quantity]
+      properties:
+        clientItemId: { type: string, maxLength: 128 }
+        benefitSkuId: { type: string, maxLength: 128 }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        amountMinor: { type: integer, minimum: 1 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        quantity: { type: integer, minimum: 1, maximum: 1 }
+        metadata: { type: object, additionalProperties: { type: string } }
+      description: Atomic item (quantity=1); split multiple units into stable clientItemIds. CASH requires money; non-cash items must omit amountMinor and currency.
+    FulfillmentEvent:
+      type: object
+      additionalProperties: false
+      required: [awardOrderNo, awardItemNo, status, occurredAt, factType, skuId, benefitType, quantity, entryType]
+      properties:
+        awardOrderNo: { type: string }
+        awardItemNo: { type: string }
+        operationNo: { type: string }
+        status: { type: string }
+        channelCode: { type: string }
+        providerReference: { type: string }
+        errorCode: { type: string }
+        occurredAt: { type: string, format: date-time }
+        factType: { enum: [EXPECTED, INTERNAL, PROVIDER] }
+        skuId: { type: string }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        quantity: { type: integer, minimum: 1 }
+        amountMinor: { type: integer }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        entryType: { enum: [ISSUE, REVERSAL] }
+      description: Non-cash fulfillment facts omit amountMinor/currency; reconciliation uses quantity and status.
+    RemediationCommand:
+      type: object
+      additionalProperties: false
+      required: [externalCommandId, action, awardItemNo, reason]
+      properties:
+        externalCommandId: { type: string, maxLength: 128 }
+        action: { enum: [REISSUE, REVERSE, MANUAL_REVIEW] }
+        awardItemNo: { type: string, maxLength: 64 }
+        originalOperationNo: { type: string, maxLength: 64 }
+        reason: { type: string, maxLength: 512 }
+        approvalRef: { type: string, maxLength: 256 }
+    RemediationResult:
+      type: object
+      additionalProperties: false
+      required: [externalCommandId, remediationNo, status]
+      properties:
+        externalCommandId: { type: string }
+        remediationNo: { type: string }
+        status: { enum: [PROPOSED, APPROVED, DISPATCHING, SUCCEEDED, FAILED, UNKNOWN] }
+        reference: { type: string }
+        errorCode: { type: string }
+    BenefitType:
+      enum: [CASH, COUPON, SERVICE_VOUCHER, REDEMPTION_CODE, PHYSICAL]

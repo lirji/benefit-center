@@ -1,0 +1,17 @@
+name: benefit-center-ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B verify
+      - name: Validate API contracts
+        run: ruby -e "require 'yaml'; YAML.load_file('benefit-contract/src/main/resources/openapi/benefit-center-v1.yaml'); YAML.load_file('benefit-contract/src/main/resources/asyncapi/benefit-center-v1.yaml')"
+      - name: Build non-root image
+        run: docker build -f deploy/Dockerfile -t benefit-center:${{ github.sha }} .

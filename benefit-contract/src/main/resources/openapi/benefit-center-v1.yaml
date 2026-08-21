@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: Enterprise Benefit Center API
+  version: 1.0.0
+  description: |
+    Company-wide idempotent benefit fulfillment API. Tenant identity is resolved from a verified JWT;
+    callers cannot select a tenant or fulfillment channel in the body. V1 package policy is BEST_EFFORT.
+servers:
+  - url: https://benefit.example.internal
+security:
+  - bearerAuth: []
+tags:
+  - name: Awards
+  - name: Remediation
+  - name: Administration
+  - name: Channel callbacks
+paths:
+  /openapi/v1/award-orders:
+    post:
+      tags: [Awards]
+      operationId: acceptAwardIntent
+      summary: Idempotently accept an award intent
+      description: Idempotency-Key must equal sourceRequestId in v1. A replay returns the original order.
+      security:
+        - bearerAuth: [benefit.award.write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AwardIntent' }
+      responses:
+        '202':
+          description: Accepted, including an idempotent replay
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      tags: [Awards]
+      operationId: findAwardOrderBySource
+      summary: Recover an order by the producer idempotency identity
+      security:
+        - bearerAuth: [benefit.award.read]
+      parameters:
+        - in: query
+          name: sourceSystem
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - in: query
+          name: sourceRequestId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AwardOrder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /openapi/v1/award-orders/{awardOrderNo}:
+    get:
+      tags: [Awards]
+      operationId: getAwardOrder
+      summary: Query an award order and its item-level outcomes
+      security:
+        - bearerAuth: [benefit.award.read]
+      parameters:
+        - in: path
+          name: awardOrderNo
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AwardOrder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/remediations:
+    post:
+      tags: [Remediation]
+      operationId: acceptRemediation
+      summary: Propose an audited reissue, reversal, or manual review
+      description: UNKNOWN original operations are rejected. Non-manual actions require approvalRef.
+      security:
+        - bearerAuth: [benefit.remediate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RemediationCommand' }
+      responses:
+        '200':
+          description: Proposed or approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RemediationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/remediations/{remediationNo}:
+    get:
+      tags: [Remediation]
+      operationId: getRemediation
+      security:
+        - bearerAuth: [benefit.remediate]
+      parameters:
+        - $ref: '#/components/parameters/RemediationNo'
+      responses:
+        '200':
+          description: Current remediation state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RemediationResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/remediations/{remediationNo}/execute:
+    post:
+      tags: [Remediation]
+      operationId: executeRemediation
+      security:
+        - bearerAuth: [benefit.remediate]
+      parameters:
+        - $ref: '#/components/parameters/RemediationNo'
+        - in: header
+          name: X-Worker-Id
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: Dispatch state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RemediationResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/skus/{skuId}:
+    put:
+      tags: [Administration]
+      operationId: upsertBenefitSku
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: path
+          name: skuId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuCommand' }
+      responses:
+        '204': { description: Saved }
+  /admin/v1/tenants/{tenantId}:
+    put:
+      tags: [Administration]
+      operationId: upsertTenantPlacement
+      description: The path tenant must equal the tenant mapped from the authenticated JWT audience.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: path
+          name: tenantId
+          required: true
+          schema: { type: string, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TenantCommand' }
+      responses:
+        '204': { description: Saved }
+  /admin/v1/routes/{routeId}:
+    put:
+      tags: [Administration]
+      operationId: upsertChannelRoute
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: path
+          name: routeId
+          required: true
+          schema: { type: string, maxLength: 64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RouteCommand' }
+      responses:
+        '204': { description: Saved }
+  /admin/v1/inventory/adjustments:
+    post:
+      tags: [Administration]
+      operationId: adjustCenterInventory
+      security:
+        - bearerAuth: [benefit.admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InventoryCommand' }
+      responses:
+        '202': { description: Adjustment appended to the inventory ledger }
+  /admin/v1/code-assets:
+    post:
+      tags: [Administration]
+      operationId: importEncryptedCodeAsset
+      security:
+        - bearerAuth: [benefit.admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CodeAssetCommand' }
+      responses:
+        '202': { description: Imported; plaintext codes are not accepted by this contract }
+  /callbacks/v1/channels/{channelCode}:
+    post:
+      tags: [Channel callbacks]
+      operationId: receiveChannelCallback
+      summary: Receive a signed, replay-protected channel callback
+      security: []
+      parameters:
+        - in: path
+          name: channelCode
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - in: header
+          name: X-Callback-Timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Callback-Nonce
+          required: true
+          schema: { type: string, maxLength: 128 }
+        - in: header
+          name: X-Callback-Signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202': { description: Callback accepted or replayed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.internal/oauth/token
+          scopes:
+            benefit.award.write: Submit award intents
+            benefit.award.read: Query award state
+            benefit.remediate: Submit and query remediation
+            benefit.admin: Manage catalog and owned inventory
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    RemediationNo:
+      in: path
+      name: remediationNo
+      required: true
+      schema: { type: string, maxLength: 64 }
+  responses:
+    BadRequest:
+      description: Invalid intent or command
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or invalid authentication
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: Missing scope, invalid tenant mapping, or cross-tenant envelope
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Idempotency payload conflict or invalid state transition
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource not found in the authenticated tenant
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    AwardIntent:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, sourceSystem, sourceRequestId, recipientRef, partialPolicy, items]
+      properties:
+        schemaVersion: { type: string, enum: ['1.0'] }
+        sourceSystem: { type: string, minLength: 1, maxLength: 64 }
+        sourceRequestId: { type: string, minLength: 1, maxLength: 128 }
+        sourceBusinessNo: { type: string, maxLength: 128, nullable: true }
+        recipientRef: { type: string, minLength: 1, maxLength: 256 }
+        decision: { $ref: '#/components/schemas/DecisionReference' }
+        partialPolicy: { type: string, enum: [BEST_EFFORT] }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/AwardItemIntent' }
+        trace:
+          type: object
+          additionalProperties: { type: string, maxLength: 256 }
+    DecisionReference:
+      type: object
+      additionalProperties: false
+      properties:
+        decisionId: { type: string, maxLength: 128 }
+        activityId: { type: string, maxLength: 64 }
+        activityVersion: { type: integer, format: int32, minimum: 1 }
+    AwardItemIntent:
+      type: object
+      additionalProperties: false
+      required: [clientItemId, benefitSkuId, benefitType, quantity]
+      properties:
+        clientItemId: { type: string, minLength: 1, maxLength: 128 }
+        benefitSkuId: { type: string, minLength: 1, maxLength: 128 }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        amountMinor: { type: integer, format: int64, minimum: 1, nullable: true }
+        currency: { type: string, pattern: '^[A-Z]{3}$', nullable: true }
+        quantity: { type: integer, format: int64, minimum: 1, maximum: 1 }
+        metadata:
+          type: object
+          additionalProperties: { type: string, maxLength: 256 }
+      description: Atomic item (quantity=1). Split multiple units into stable clientItemIds. CASH requires amountMinor/currency; every non-cash type forbids both monetary fields.
+    BenefitType:
+      type: string
+      enum: [CASH, COUPON, SERVICE_VOUCHER, REDEMPTION_CODE, PHYSICAL]
+    AcceptResult:
+      type: object
+      required: [awardOrderNo, status, replay]
+      properties:
+        awardOrderNo: { type: string }
+        status: { $ref: '#/components/schemas/AwardOrderStatus' }
+        replay: { type: boolean }
+    AwardOrder:
+      type: object
+      required: [orderNo, sourceSystem, sourceRequestId, status, homeCell, items]
+      properties:
+        orderNo: { type: string }
+        sourceSystem: { type: string }
+        sourceRequestId: { type: string }
+        sourceBusinessNo: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/AwardOrderStatus' }
+        homeCell: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AwardItem' }
+    AwardOrderStatus:
+      type: string
+      enum: [ACCEPTED, PROCESSING, SUCCEEDED, PARTIAL_SUCCEEDED, FAILED, REMEDIATING, REVERSING, REVERSED, PARTIALLY_REVERSED]
+    AwardItem:
+      type: object
+      properties:
+        itemNo: { type: string }
+        clientItemId: { type: string }
+        skuId: { type: string }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        quantity: { type: integer, format: int64 }
+        amountMinor: { type: integer, format: int64, nullable: true }
+        currency: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [PENDING, RESERVED, DISPATCHING, SUCCEEDED, FAILED_FINAL, UNKNOWN, QUERYING, REISSUING, REVERSING, REVERSED, REVERSAL_FAILED, REVERSAL_UNKNOWN]
+        routeId: { type: string, nullable: true }
+        failureCode: { type: string, nullable: true }
+    RemediationCommand:
+      type: object
+      additionalProperties: false
+      required: [externalCommandId, action, awardItemNo, reason]
+      properties:
+        externalCommandId: { type: string, minLength: 1, maxLength: 128 }
+        action: { type: string, enum: [REISSUE, REVERSE, MANUAL_REVIEW] }
+        awardItemNo: { type: string, minLength: 1, maxLength: 64 }
+        originalOperationNo: { type: string, maxLength: 64, nullable: true }
+        reason: { type: string, minLength: 1, maxLength: 512 }
+        approvalRef: { type: string, maxLength: 256, nullable: true }
+    RemediationResult:
+      type: object
+      properties:
+        externalCommandId: { type: string }
+        remediationNo: { type: string }
+        status: { type: string, enum: [PROPOSED, APPROVED, REJECTED, DISPATCHING, SUCCEEDED, FAILED, UNKNOWN] }
+        reference: { type: string, nullable: true }
+        errorCode: { type: string, nullable: true }
+    TenantCommand:
+      type: object
+      required: [tenantId, homeCell, enabled]
+      properties:
+        tenantId: { type: string, minLength: 1, maxLength: 64 }
+        homeCell: { type: string, minLength: 1, maxLength: 32 }
+        enabled: { type: boolean }
+        expectedVersion: { type: integer, format: int64, nullable: true }
+    SkuCommand:
+      type: object
+      required: [skuId, benefitType, enabled]
+      properties:
+        skuId: { type: string }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        faceValueMinor: { type: integer, format: int64, nullable: true }
+        currency: { type: string, nullable: true }
+        enabled: { type: boolean }
+        expectedVersion: { type: integer, format: int64, nullable: true }
+    RouteCommand:
+      type: object
+      required: [routeId, skuId, priority, channelCode, ownerType, reserveMode, enabled]
+      properties:
+        routeId: { type: string }
+        skuId: { type: string }
+        priority: { type: integer, minimum: 1 }
+        channelCode: { type: string }
+        ownerType: { type: string, enum: [CENTER_QUOTA, CHANNEL_SHADOW, CENTER_STOCK] }
+        fallbackRouteId: { type: string, nullable: true }
+        reserveMode: { type: string, enum: [LAZY, EAGER] }
+        enabled: { type: boolean }
+        configRef: { type: string, nullable: true }
+        expectedVersion: { type: integer, format: int64, nullable: true }
+    InventoryCommand:
+      type: object
+      required: [accountId, skuId, ownerType, ownerId, deltaAvailable, requestId]
+      properties:
+        accountId: { type: string }
+        skuId: { type: string }
+        ownerType: { type: string, enum: [CENTER_QUOTA, CHANNEL_SHADOW, CENTER_STOCK] }
+        ownerId: { type: string }
+        deltaAvailable: { type: integer, format: int64 }
+        requestId: { type: string }
+    CodeAssetCommand:
+      type: object
+      required: [codeAssetId, skuId, codeHash, cipherText, keyVersion]
+      properties:
+        codeAssetId: { type: string }
+        skuId: { type: string }
+        codeHash: { type: string, description: SHA-256 or keyed hash of the code }
+        cipherText: { type: string, description: KMS-encrypted code; plaintext is forbidden }
+        keyVersion: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [INVALID_INTENT, IDEMPOTENCY_PAYLOAD_CONFLICT, SKU_NOT_FOUND, INVENTORY_INSUFFICIENT, CHANNEL_RETRYABLE, CHANNEL_FINAL_FAILURE, CHANNEL_RESULT_UNKNOWN, REMEDIATION_NOT_ALLOWED, INTERNAL_ERROR]
+        message: { type: string }

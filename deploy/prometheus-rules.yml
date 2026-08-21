@@ -1,0 +1,28 @@
+groups:
+  - name: benefit-center
+    rules:
+      - alert: BenefitInventoryInvariantBroken
+        expr: benefit_inventory_invalid > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations: { summary: "Benefit inventory invariant is broken" }
+      - alert: BenefitUnknownOperationsAccumulating
+        expr: benefit_operation_unknown > 0
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "Benefit operations remain UNKNOWN and require provider query" }
+      - alert: BenefitOutboxDead
+        expr: benefit_outbox_dead > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "Benefit outbox contains DEAD events" }
+      - alert: BenefitOutboxBacklog
+        expr: benefit_outbox_pending > 10000
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Benefit outbox backlog exceeds the initial operating threshold" }
+      - alert: BenefitRemediationBacklog
+        expr: benefit_remediation_pending > 100
+        for: 30m
+        labels: { severity: warning }
+        annotations: { summary: "Benefit remediation backlog is growing" }
