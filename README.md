@@ -11,6 +11,7 @@
 - `benefit-application`：幂等受理、库存预占、异步履约、UNKNOWN 查询确认、fallback 与 remediation 用例。
 - `benefit-adapters`：JDBC/Flyway、Kafka inbox/outbox、中心码池/实物、签名 HTTP 参考渠道、JWT tenant。
 - `benefit-server`：公开 API、内部接口、worker、Actuator/Prometheus。
+- `benefit-console`：独立运营台（React + Vite），经 nginx 同源反代 `/openapi` `/admin` `/internal`。
 
 ## 正确性边界
 
@@ -26,7 +27,20 @@
 
 ```bash
 mvn verify
-docker compose -f deploy/docker-compose.yml up --build
+bash deploy/bootstrap-dev-infra.sh
+bash deploy/compose.sh up --build
+```
+
+本地运行统一使用同级 `/Users/liruijun/personal/LLM/dev-infra` 的 MySQL 8.4 与 Kafka 3.8，不再创建项目私有 MySQL/Redpanda。首次运行先从 `deploy/.env.example` 创建未提交的 `deploy/.env`，再执行幂等初始化脚本；完整资源清单、连接方式和回滚步骤见 [`docs/dev-infra.md`](docs/dev-infra.md)。
+
+同级 `auth-platform` 工作区会自动加载中央门户端口 `BENEFIT_UI_PORT`（默认 `8083`）。独立 checkout 找不到该注册表时仍用 8083。浏览器入口是独立 console：`http://localhost:8083/`；门户探活打 console 的 `GET /healthz`（纯文本 `ok`，CORS `*`）。Java API 只绑定 `127.0.0.1:8183`，不再提供 HTML 落地页。
+
+本地前端开发：
+
+```bash
+cd benefit-console
+corepack pnpm install
+corepack pnpm dev    # Vite :5173，反代 API 到 localhost:8183
 ```
 
 本地 compose 显式开启 header 租户开发模式；生产默认是 JWT 模式，所有 worker、消息消费、真实 HTTP 渠道和自动 remediation 均默认关闭。首次调用前需要通过 admin API 创建 tenant 配置、SKU、route 和中心库存。

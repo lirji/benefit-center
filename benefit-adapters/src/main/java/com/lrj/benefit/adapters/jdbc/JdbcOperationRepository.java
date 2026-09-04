@@ -50,6 +50,15 @@ public final class JdbcOperationRepository implements OperationRepository {
         return values.stream().findFirst();
     }
 
+    @Override public List<FulfillmentOperation> findByItem(String tenantId, String itemNo) {
+        return jdbc.query("""
+                SELECT tenant_id,operation_no,item_no,operation_type,idempotency_key,remediation_no,status,
+                       lease_owner,lease_until,version
+                FROM bc_fulfillment_operation WHERE tenant_id=? AND item_no=?
+                ORDER BY updated_at DESC, operation_no DESC
+                """, this::map, tenantId, itemNo);
+    }
+
     @Override public List<FulfillmentOperation> findDue(String tenantId, Instant now, int limit) {
         // A worker that died before I/O is safe to retry. A worker that died after DISPATCHING is UNKNOWN,
         // therefore the next owner must query the same operation instead of issuing again.

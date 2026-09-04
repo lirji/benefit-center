@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface OperationRepository {
     boolean insert(FulfillmentOperation operation);
     Optional<FulfillmentOperation> find(String tenantId, String operationNo);
+    List<FulfillmentOperation> findByItem(String tenantId, String itemNo);
     List<FulfillmentOperation> findDue(String tenantId, Instant now, int limit);
     boolean claimLease(String tenantId, String operationNo, String owner, Instant now, Instant until, long expectedVersion);
     boolean updateExpectedState(String tenantId, FulfillmentOperation operation, long expectedVersion);

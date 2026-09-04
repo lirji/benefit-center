@@ -13,6 +13,7 @@ tags:
   - name: Awards
   - name: Remediation
   - name: Administration
+  - name: Console
   - name: Channel callbacks
 paths:
   /openapi/v1/award-orders:
@@ -205,7 +206,152 @@ paths:
             schema: { $ref: '#/components/schemas/InventoryCommand' }
       responses:
         '202': { description: Adjustment appended to the inventory ledger }
+  /admin/v1/console/me:
+    get:
+      tags: [Console]
+      operationId: getConsoleIdentity
+      summary: Current console identity for the mapped JWT tenant
+      security:
+        - bearerAuth: [benefit.admin]
+      responses:
+        '200':
+          description: Identity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsoleIdentity' }
+  /admin/v1/console/overview:
+    get:
+      tags: [Console]
+      operationId: getConsoleOverview
+      summary: Tenant-scoped operational counts for the console dashboard
+      security:
+        - bearerAuth: [benefit.admin]
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsoleOverview' }
+  /admin/v1/console/attention-orders:
+    get:
+      tags: [Console]
+      operationId: listAttentionOrders
+      summary: Orders that are partial, remediating, or contain UNKNOWN/QUERYING items
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Attention list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AttentionOrder' }
+  /admin/v1/tenants/current:
+    get:
+      tags: [Console]
+      operationId: getCurrentTenant
+      security:
+        - bearerAuth: [benefit.admin]
+      responses:
+        '200':
+          description: Current tenant config
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/v1/skus:
+    get:
+      tags: [Console]
+      operationId: listBenefitSkus
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: SKU list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SkuView' }
+  /admin/v1/routes:
+    get:
+      tags: [Console]
+      operationId: listChannelRoutes
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: query
+          name: skuId
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Route list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RouteView' }
+  /admin/v1/inventory/accounts:
+    get:
+      tags: [Console]
+      operationId: listInventoryAccounts
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Inventory balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InventoryView' }
+  /admin/v1/remediations:
+    get:
+      tags: [Console]
+      operationId: listRemediations
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Remediation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RemediationView' }
   /admin/v1/code-assets:
+    get:
+      tags: [Console]
+      operationId: listCodeAssets
+      description: Returns metadata only. cipherText is never included; codeHash is truncated to 8 characters.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: query
+          name: skuId
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Code asset metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CodeAssetView' }
     post:
       tags: [Administration]
       operationId: importEncryptedCodeAsset
@@ -272,6 +418,10 @@ components:
       name: remediationNo
       required: true
       schema: { type: string, maxLength: 64 }
+    ConsoleLimit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
   responses:
     BadRequest:
       description: Invalid intent or command
@@ -372,6 +522,8 @@ components:
           enum: [PENDING, RESERVED, DISPATCHING, SUCCEEDED, FAILED_FINAL, UNKNOWN, QUERYING, REISSUING, REVERSING, REVERSED, REVERSAL_FAILED, REVERSAL_UNKNOWN]
         routeId: { type: string, nullable: true }
         failureCode: { type: string, nullable: true }
+        latestOperationNo: { type: string, nullable: true }
+        latestOperationStatus: { type: string, nullable: true }
     RemediationCommand:
       type: object
       additionalProperties: false
@@ -442,6 +594,98 @@ components:
         codeHash: { type: string, description: SHA-256 or keyed hash of the code }
         cipherText: { type: string, description: KMS-encrypted code; plaintext is forbidden }
         keyVersion: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    ConsoleIdentity:
+      type: object
+      required: [tenantId, subject, displayName, scopes]
+      properties:
+        tenantId: { type: string }
+        subject: { type: string }
+        displayName: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+    ConsoleOverview:
+      type: object
+      required: [unknownOps, partialOrders, pendingRemediations, skuCount, enabledRoutes]
+      properties:
+        unknownOps: { type: integer, format: int64 }
+        partialOrders: { type: integer, format: int64 }
+        pendingRemediations: { type: integer, format: int64 }
+        skuCount: { type: integer, format: int64 }
+        enabledRoutes: { type: integer, format: int64 }
+    TenantView:
+      type: object
+      required: [tenantId, homeCell, enabled, version]
+      properties:
+        tenantId: { type: string }
+        homeCell: { type: string }
+        enabled: { type: boolean }
+        version: { type: integer, format: int64 }
+    SkuView:
+      type: object
+      required: [skuId, benefitType, enabled, version]
+      properties:
+        skuId: { type: string }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        faceValueMinor: { type: integer, format: int64, nullable: true }
+        currency: { type: string, nullable: true }
+        enabled: { type: boolean }
+        version: { type: integer, format: int64 }
+    RouteView:
+      type: object
+      required: [routeId, skuId, priority, channelCode, ownerType, reserveMode, enabled, version]
+      properties:
+        routeId: { type: string }
+        skuId: { type: string }
+        priority: { type: integer }
+        channelCode: { type: string }
+        ownerType: { type: string }
+        fallbackRouteId: { type: string, nullable: true }
+        reserveMode: { type: string }
+        enabled: { type: boolean }
+        configRef: { type: string, nullable: true }
+        version: { type: integer, format: int64 }
+    InventoryView:
+      type: object
+      required: [accountId, skuId, ownerType, ownerId, available, reserved, issued, version]
+      properties:
+        accountId: { type: string }
+        skuId: { type: string }
+        ownerType: { type: string }
+        ownerId: { type: string }
+        available: { type: integer, format: int64 }
+        reserved: { type: integer, format: int64 }
+        issued: { type: integer, format: int64 }
+        version: { type: integer, format: int64 }
+    AttentionOrder:
+      type: object
+      required: [orderNo, sourceSystem, sourceRequestId, status]
+      properties:
+        orderNo: { type: string }
+        sourceSystem: { type: string }
+        sourceRequestId: { type: string }
+        status: { type: string }
+        reason: { type: string }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    RemediationView:
+      type: object
+      required: [remediationNo, action, itemNo, status]
+      properties:
+        remediationNo: { type: string }
+        action: { type: string }
+        itemNo: { type: string }
+        status: { type: string }
+        reason: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    CodeAssetView:
+      type: object
+      required: [codeAssetId, skuId, status]
+      properties:
+        codeAssetId: { type: string }
+        skuId: { type: string }
+        status: { type: string }
+        codeHashPrefix: { type: string, nullable: true, description: First 8 characters of codeHash. Never the full hash or cipherText. }
         expiresAt: { type: string, format: date-time, nullable: true }
     Error:
       type: object

@@ -1,55 +1,49 @@
 services:
-  mysql:
-    image: mysql:8.4
-    environment:
-      MYSQL_DATABASE: benefit_center
-      MYSQL_USER: benefit
-      MYSQL_PASSWORD: benefit-dev
-      MYSQL_ROOT_PASSWORD: root-dev
-    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_bin"]
-    ports: ["3308:3306"]
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot-dev --silent"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    volumes:
-      - benefit_mysql:/var/lib/mysql
-
-  redpanda:
-    image: redpandadata/redpanda:v24.2.18
-    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "512M", "--reserve-memory", "0M", "--node-id", "0", "--check=false", "--kafka-addr", "PLAINTEXT://0.0.0.0:9092", "--advertise-kafka-addr", "PLAINTEXT://redpanda:9092"]
-    ports: ["19092:9092"]
-    healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
   benefit-center:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+    restart: unless-stopped
     environment:
-      BENEFIT_DB_URL: jdbc:mysql://mysql:3306/benefit_center?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC
-      BENEFIT_DB_USER: benefit
-      BENEFIT_DB_PASSWORD: benefit-dev
-      BENEFIT_KAFKA_BOOTSTRAP: redpanda:9092
+      BENEFIT_DB_URL: jdbc:mysql://infra-mysql84:3306/benefit_center?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC
+      BENEFIT_DB_USER: ${BENEFIT_DB_USER:-benefit}
+      BENEFIT_DB_PASSWORD: ${BENEFIT_DB_PASSWORD:?set BENEFIT_DB_PASSWORD in deploy/.env}
+      BENEFIT_KAFKA_BOOTSTRAP: infra-kafka38:9092
       BENEFIT_SECURITY_DEV_MODE: "true"
       BENEFIT_WORKER_ENABLED: "true"
       BENEFIT_WORKER_TENANTS: dev-tenant
       BENEFIT_OUTBOX_ENABLED: "true"
       BENEFIT_AWARD_INTENT_CONSUMER_ENABLED: "true"
       BENEFIT_REMEDIATION_CONSUMER_ENABLED: "true"
-    ports: ["8083:8083"]
-    depends_on:
-      mysql: { condition: service_healthy }
-      redpanda: { condition: service_healthy }
+    ports: ["127.0.0.1:8183:8083"]
+    networks:
+      - dev-infra
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8083/actuator/health/readiness | grep -q UP"]
       interval: 10s
       timeout: 3s
       retries: 30
 
-volumes:
-  benefit_mysql: {}
+  console:
+    build:
+      context: ../benefit-console
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BENEFIT_API_URL: http://benefit-center:8083
+    ports: ["${BENEFIT_UI_PORT:-8083}:8083"]
+    depends_on:
+      benefit-center:
+        condition: service_healthy
+    networks:
+      - dev-infra
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+networks:
+  dev-infra:
+    external: true
+    name: ${DEV_INFRA_NETWORK:-dev-infra}

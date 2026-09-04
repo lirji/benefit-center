@@ -14,15 +14,25 @@ class BenefitSchemaMigrationTest {
         String url = "jdbc:h2:mem:benefit_schema;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE";
         Flyway flyway = Flyway.configure()
                 .dataSource(url, "sa", "")
-                .locations("classpath:db/migration")
+                .locations("classpath:db/migration", "classpath:db/vendor/h2")
                 .load();
 
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(8);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(10);
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
 
         try (var connection = DriverManager.getConnection(url, "sa", "");
              var statement = connection.prepareStatement(
                      "select count(*) from information_schema.tables where table_schema = 'public' and table_name like 'bc_%'");
+             var rows = statement.executeQuery()) {
+            rows.next();
+            assertThat(rows.getInt(1)).isEqualTo(16);
+        }
+
+        try (var connection = DriverManager.getConnection(url, "sa", "");
+             var statement = connection.prepareStatement(
+                     "select count(*) from information_schema.tables "
+                             + "where table_schema = 'public' and table_name like 'bc_%' "
+                             + "and remarks is not null and remarks <> ''");
              var rows = statement.executeQuery()) {
             rows.next();
             assertThat(rows.getInt(1)).isEqualTo(16);

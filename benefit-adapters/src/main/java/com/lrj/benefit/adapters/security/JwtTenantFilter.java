@@ -23,6 +23,12 @@ public final class JwtTenantFilter extends OncePerRequestFilter {
         this.audienceTenants = parse(audienceTenantMappings);
     }
 
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return "/healthz".equals(path);
+    }
+
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                               FilterChain chain) throws ServletException, IOException {
         try {

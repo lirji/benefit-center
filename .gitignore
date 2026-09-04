@@ -3,3 +3,10 @@ target/
 .idea/
 *.iml
 .DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+test-results/
+playwright-report/

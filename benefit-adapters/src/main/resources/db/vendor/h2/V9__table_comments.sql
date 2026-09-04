@@ -1,0 +1,16 @@
+COMMENT ON TABLE bc_tenant_config IS '租户配置表';
+COMMENT ON TABLE bc_benefit_sku IS '权益SKU定义表';
+COMMENT ON TABLE bc_channel_route IS '权益履约渠道路由表';
+COMMENT ON TABLE bc_inventory_account IS '权益库存账户表';
+COMMENT ON TABLE bc_award_order IS '权益发放订单表';
+COMMENT ON TABLE bc_award_item IS '权益发放订单明细表';
+COMMENT ON TABLE bc_fulfillment_operation IS '权益履约操作表';
+COMMENT ON TABLE bc_fulfillment_attempt IS '权益履约尝试记录表';
+COMMENT ON TABLE bc_inventory_ledger IS '权益库存变动流水表';
+COMMENT ON TABLE bc_award_ledger_entry IS '权益发放业务台账表';
+COMMENT ON TABLE bc_code_asset IS '兑换码资产表';
+COMMENT ON TABLE bc_physical_fulfillment IS '实物权益履约信息表';
+COMMENT ON TABLE bc_remediation_order IS '补发与冲正处理单表';
+COMMENT ON TABLE bc_channel_callback IS '渠道回调记录表';
+COMMENT ON TABLE bc_outbox_event IS '事务发件箱事件表';
+COMMENT ON TABLE bc_inbox_message IS '消息收件箱去重表';

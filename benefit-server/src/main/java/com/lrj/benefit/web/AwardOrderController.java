@@ -6,9 +6,11 @@ import com.lrj.benefit.application.port.in.AcceptAwardIntentUseCase;
 import com.lrj.benefit.application.port.in.QueryAwardOrderUseCase;
 import com.lrj.benefit.application.result.AcceptResult;
 import com.lrj.benefit.application.port.out.CellRouter;
+import com.lrj.benefit.application.port.out.OperationRepository;
 import com.lrj.benefit.contract.AwardIntent;
 import com.lrj.benefit.domain.model.AwardItem;
 import com.lrj.benefit.domain.model.AwardOrder;
+import com.lrj.benefit.domain.model.FulfillmentOperation;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,12 +24,14 @@ public class AwardOrderController {
     private final AcceptAwardIntentUseCase accept;
     private final QueryAwardOrderUseCase query;
     private final CellRouter cells;
+    private final OperationRepository operations;
 
     public AwardOrderController(AcceptAwardIntentUseCase accept, QueryAwardOrderUseCase query,
-                                CellRouter cells) {
+                                CellRouter cells, OperationRepository operations) {
         this.accept = accept;
         this.query = query;
         this.cells = cells;
+        this.operations = operations;
     }
 
     @PostMapping
@@ -44,35 +48,41 @@ public class AwardOrderController {
 
     @GetMapping("/{orderNo}")
     public AwardOrderResponse get(@PathVariable String orderNo) {
-        return query.get(TenantContext.required(), orderNo).map(AwardOrderResponse::from)
+        String tenantId = TenantContext.required();
+        return query.get(tenantId, orderNo).map(order -> AwardOrderResponse.from(order, operations))
                 .orElseThrow(() -> new AwardNotFoundException("award order not found"));
     }
 
     @GetMapping
     public AwardOrderResponse findBySource(@RequestParam String sourceSystem,
                                            @RequestParam String sourceRequestId) {
-        return query.findBySource(TenantContext.required(), sourceSystem, sourceRequestId)
-                .map(AwardOrderResponse::from)
+        String tenantId = TenantContext.required();
+        return query.findBySource(tenantId, sourceSystem, sourceRequestId)
+                .map(order -> AwardOrderResponse.from(order, operations))
                 .orElseThrow(() -> new AwardNotFoundException("award order not found"));
     }
 
     public record AwardOrderResponse(String orderNo, String sourceSystem, String sourceRequestId,
                                      String sourceBusinessNo, String status, String homeCell,
                                      List<AwardItemResponse> items) {
-        static AwardOrderResponse from(AwardOrder order) {
+        static AwardOrderResponse from(AwardOrder order, OperationRepository operations) {
             return new AwardOrderResponse(order.orderNo(), order.sourceSystem(), order.sourceRequestId(),
                     order.sourceBusinessNo(), order.status().name(), order.homeCell(),
-                    order.items().stream().map(AwardItemResponse::from).toList());
+                    order.items().stream().map(item -> AwardItemResponse.from(order.tenantId(), item, operations)).toList());
         }
     }
 
     public record AwardItemResponse(String itemNo, String clientItemId, String skuId, String benefitType,
                                     long quantity, Long amountMinor, String currency, String status,
-                                    String routeId, String failureCode) {
-        static AwardItemResponse from(AwardItem item) {
+                                    String routeId, String failureCode, String latestOperationNo,
+                                    String latestOperationStatus) {
+        static AwardItemResponse from(String tenantId, AwardItem item, OperationRepository operations) {
+            FulfillmentOperation latest = operations.findByItem(tenantId, item.itemNo()).stream().findFirst().orElse(null);
             return new AwardItemResponse(item.itemNo(), item.clientItemId(), item.skuId(),
                     item.benefitType().name(), item.quantity(), item.amountMinor(), item.currency(),
-                    item.status().name(), item.routeId(), item.failureCode());
+                    item.status().name(), item.routeId(), item.failureCode(),
+                    latest == null ? null : latest.operationNo(),
+                    latest == null ? null : latest.status().name());
         }
     }
 }

@@ -82,6 +82,10 @@ public class BenefitCenterConfiguration {
                                                   ChannelAdapterRegistry adapters) {
         return new JdbcCatalogAdminService(jdbc, unitOfWork, ids, adapters);
     }
+
+    @Bean ConsoleQueryUseCase consoleQueryUseCase(JdbcTemplate jdbc) {
+        return new JdbcConsoleQueryService(jdbc);
+    }
     @Bean AwardApplicationService awardApplicationService(AwardRepository awards,
                                                           BenefitCatalogRepository catalog,
                                                           InventoryRepository inventory,

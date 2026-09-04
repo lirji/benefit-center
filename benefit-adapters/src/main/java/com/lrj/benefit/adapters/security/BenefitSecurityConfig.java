@@ -12,9 +12,29 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 public final class BenefitSecurityConfig {
     private BenefitSecurityConfig() {}
+
+    @Configuration
+    static class PortalCors {
+        /** 仅开放门户探活跨域 GET；浏览器入口已迁到独立 console，不再开放 Java GET /。 */
+        @Bean CorsConfigurationSource corsConfigurationSource() {
+            CorsConfiguration config = new CorsConfiguration();
+            config.setAllowedOrigins(List.of("*"));
+            config.setAllowedMethods(List.of("GET", "HEAD", "OPTIONS"));
+            config.setAllowedHeaders(List.of("*"));
+            config.setAllowCredentials(false);
+            UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+            source.registerCorsConfiguration("/healthz", config);
+            return source;
+        }
+    }
 
     @Configuration
     @ConditionalOnProperty(name = "benefit.security.dev-mode", havingValue = "true")
@@ -26,6 +46,7 @@ public final class BenefitSecurityConfig {
 
         @Bean SecurityFilterChain devBenefitSecurity(HttpSecurity http, JwtTenantFilter tenantFilter) throws Exception {
             return http.csrf(csrf -> csrf.disable())
+                    .cors(Customizer.withDefaults())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                     .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class)
@@ -48,9 +69,11 @@ public final class BenefitSecurityConfig {
 
         @Bean SecurityFilterChain secureBenefitSecurity(HttpSecurity http, JwtTenantFilter tenantFilter) throws Exception {
             return http.csrf(csrf -> csrf.disable())
+                    .cors(Customizer.withDefaults())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                            .requestMatchers("/healthz", "/actuator/health/**", "/actuator/info").permitAll()
+                            .requestMatchers(HttpMethod.OPTIONS, "/healthz").permitAll()
                             .requestMatchers(HttpMethod.POST, "/openapi/v1/award-orders").hasAuthority("SCOPE_benefit.award.write")
                             .requestMatchers(HttpMethod.GET, "/openapi/v1/award-orders/**").hasAuthority("SCOPE_benefit.award.read")
                             .requestMatchers("/internal/v1/remediations/**").hasAuthority("SCOPE_benefit.remediate")

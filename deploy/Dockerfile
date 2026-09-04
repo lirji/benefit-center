@@ -6,13 +6,13 @@ COPY benefit-domain/pom.xml benefit-domain/pom.xml
 COPY benefit-application/pom.xml benefit-application/pom.xml
 COPY benefit-adapters/pom.xml benefit-adapters/pom.xml
 COPY benefit-server/pom.xml benefit-server/pom.xml
-RUN mvn -q -DskipTests dependency:go-offline
 COPY benefit-contract/src benefit-contract/src
 COPY benefit-domain/src benefit-domain/src
 COPY benefit-application/src benefit-application/src
 COPY benefit-adapters/src benefit-adapters/src
 COPY benefit-server/src benefit-server/src
-RUN mvn -q -DskipTests package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
+    mvn -q -DskipTests package
 
 FROM eclipse-temurin:21-jre
 RUN apt-get update \

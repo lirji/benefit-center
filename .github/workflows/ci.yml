@@ -15,3 +15,23 @@ jobs:
         run: ruby -e "require 'yaml'; YAML.load_file('benefit-contract/src/main/resources/openapi/benefit-center-v1.yaml'); YAML.load_file('benefit-contract/src/main/resources/asyncapi/benefit-center-v1.yaml')"
       - name: Build non-root image
         run: docker build -f deploy/Dockerfile -t benefit-center:${{ github.sha }} .
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: benefit-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: benefit-console/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test && pnpm build
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
