@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Descriptions, Drawer, Grid, Space, Table, Timeline, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { getAwardOrder } from '../../api/benefit'
-import type { AwardItem } from '../../api/types'
+import type { AwardItem, AwardOrder } from '../../api/types'
 import { AwardItemStatusTag, AwardOrderStatusTag, canRemediateItem } from '../common/StatusTag'
 import { formatDateTime, formatMinor } from '../../utils/format'
+import { walletEntryHref } from './walletHref'
 
 export function OrderDetailDrawer({ orderNo, onClose }: { orderNo: string | null; onClose: () => void }) {
   const screens = Grid.useBreakpoint()
@@ -36,6 +37,7 @@ export function OrderDetailDrawer({ orderNo, onClose }: { orderNo: string | null
           <Descriptions column={screens.md ? 2 : 1} size="small" style={{ marginTop: 16 }}>
             <Descriptions.Item label="业务单号">{query.data.sourceBusinessNo || '—'}</Descriptions.Item>
             <Descriptions.Item label="归属 Cell">{query.data.homeCell}</Descriptions.Item>
+            <Descriptions.Item label="用户">{query.data.recipientRef || '—'}</Descriptions.Item>
           </Descriptions>
           <h3 className="section-title">子项</h3>
           {screens.md ? (
@@ -49,6 +51,12 @@ export function OrderDetailDrawer({ orderNo, onClose }: { orderNo: string | null
                 { title: 'SKU', dataIndex: 'skuId' },
                 { title: '状态', dataIndex: 'status', render: (s: string) => <AwardItemStatusTag status={s} /> },
                 { title: '金额', render: (_, item) => formatMinor(item.amountMinor, item.currency) },
+                {
+                  title: '券包',
+                  render: (_, item) => (
+                    <WalletEntryLink order={query.data} item={item} navigate={navigate} onClose={onClose} />
+                  ),
+                },
                 {
                   title: '处置',
                   render: (_, item) => (
@@ -66,6 +74,7 @@ export function OrderDetailDrawer({ orderNo, onClose }: { orderNo: string | null
                     <AwardItemStatusTag status={item.status} />
                   </div>
                   <span className="mono mobile-card-id">{item.itemNo}</span>
+                  <WalletEntryLink order={query.data} item={item} navigate={navigate} onClose={onClose} />
                   <RemediateAction item={item} onClose={onClose} navigate={navigate} />
                 </div>
               ))}
@@ -86,6 +95,35 @@ export function OrderDetailDrawer({ orderNo, onClose }: { orderNo: string | null
         </>
       )}
     </Drawer>
+  )
+}
+
+function WalletEntryLink({
+  order,
+  item,
+  navigate,
+  onClose,
+}: {
+  order: AwardOrder
+  item: AwardItem
+  navigate: ReturnType<typeof useNavigate>
+  onClose: () => void
+}) {
+  if (!item.walletEntryId) return <span>—</span>
+  const href = walletEntryHref(order.recipientRef, item.walletEntryId)
+  if (!href) return <span className="mono">{item.walletEntryId}</span>
+  return (
+    <Button
+      type="link"
+      className="mono"
+      aria-label="入账券包"
+      onClick={() => {
+        onClose()
+        navigate(href)
+      }}
+    >
+      {item.walletEntryId}
+    </Button>
   )
 }
 

@@ -62,12 +62,17 @@ public final class BenefitSecurityConfig {
             return NimbusJwtDecoder.withJwkSetUri(uri).build();
         }
 
+        @Bean CasdoorAuthorityMapper casdoorAuthorityMapper() {
+            return new CasdoorAuthorityMapper();
+        }
+
         @Bean JwtTenantFilter jwtTenantFilter(
                 @Value("${benefit.security.audience-tenants:}") String mappings) {
             return new JwtTenantFilter(false, mappings);
         }
 
-        @Bean SecurityFilterChain secureBenefitSecurity(HttpSecurity http, JwtTenantFilter tenantFilter) throws Exception {
+        @Bean SecurityFilterChain secureBenefitSecurity(HttpSecurity http, JwtTenantFilter tenantFilter,
+                                                        CasdoorAuthorityMapper authorityMapper) throws Exception {
             return http.csrf(csrf -> csrf.disable())
                     .cors(Customizer.withDefaults())
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -76,11 +81,13 @@ public final class BenefitSecurityConfig {
                             .requestMatchers(HttpMethod.OPTIONS, "/healthz").permitAll()
                             .requestMatchers(HttpMethod.POST, "/openapi/v1/award-orders").hasAuthority("SCOPE_benefit.award.write")
                             .requestMatchers(HttpMethod.GET, "/openapi/v1/award-orders/**").hasAuthority("SCOPE_benefit.award.read")
+                            .requestMatchers(HttpMethod.POST, "/openapi/v1/wallet-entries/**").hasAuthority("SCOPE_benefit.admin")
                             .requestMatchers("/internal/v1/remediations/**").hasAuthority("SCOPE_benefit.remediate")
                             .requestMatchers("/admin/v1/**").hasAuthority("SCOPE_benefit.admin")
                             .requestMatchers("/callbacks/v1/**").permitAll()
                             .anyRequest().authenticated())
-                    .oauth2ResourceServer(resource -> resource.jwt(Customizer.withDefaults()))
+                    .oauth2ResourceServer(resource -> resource.jwt(jwt ->
+                            jwt.jwtAuthenticationConverter(authorityMapper.jwtAuthenticationConverter())))
                     .addFilterAfter(tenantFilter, BearerTokenAuthenticationFilter.class)
                     .build();
         }

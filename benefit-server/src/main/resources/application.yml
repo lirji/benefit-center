@@ -13,6 +13,12 @@ spring:
     locations: classpath:db/migration,classpath:db/vendor/{vendor}
   kafka:
     bootstrap-servers: ${BENEFIT_KAFKA_BOOTSTRAP:127.0.0.1:49092}
+  data:
+    redis:
+      host: ${BENEFIT_REDIS_HOST:127.0.0.1}
+      port: ${BENEFIT_REDIS_PORT:46379}
+      password: ${BENEFIT_REDIS_PASSWORD:}
+      timeout: ${BENEFIT_REDIS_TIMEOUT:500ms}
 
 server:
   port: ${SERVER_PORT:8083}
@@ -28,6 +34,11 @@ management:
         enabled: true
 
 benefit:
+  cache:
+    redis-enabled: ${BENEFIT_REDIS_CACHE_ENABLED:true}
+    template-ttl: ${BENEFIT_TEMPLATE_CACHE_TTL:PT20S}
+    template-maximum-size: ${BENEFIT_TEMPLATE_CACHE_MAXIMUM_SIZE:10000}
+    user-limit-ttl: ${BENEFIT_USER_LIMIT_CACHE_TTL:PT30S}
   cell:
     id: ${BENEFIT_CELL_ID:cell-0}
   channel:
@@ -60,6 +71,7 @@ benefit:
   kafka:
     fulfillment-topic: ${BENEFIT_FULFILLMENT_TOPIC:benefit.fulfillment-event.v1}
     remediation-topic: ${BENEFIT_REMEDIATION_TOPIC:benefit.remediation.result.v1}
+    sku-template-topic: ${BENEFIT_SKU_TEMPLATE_TOPIC:benefit.sku-template.v1}
   award-intent:
     consumer-enabled: ${BENEFIT_AWARD_INTENT_CONSUMER_ENABLED:false}
     topic: ${BENEFIT_AWARD_INTENT_TOPIC:benefit.award-intent.v1}
@@ -69,3 +81,12 @@ benefit:
     command-topic: ${BENEFIT_REMEDIATION_COMMAND_TOPIC:benefit.remediation.command.v1}
     consumer-group: ${BENEFIT_REMEDIATION_CONSUMER_GROUP:benefit-remediation-v1}
     auto-enabled: ${BENEFIT_REMEDIATION_AUTO_ENABLED:false}
+workflow:
+  kafka:
+    # 本地可开；生产必须显式开启 consumer 并配置 source/tenant 绑定与 HMAC 密钥。
+    enabled: ${WORKFLOW_KAFKA_ENABLED:false}
+    start-topic: ${WORKFLOW_KAFKA_START_TOPIC:workflow.command.start.v1}
+    requested-topic: ${WORKFLOW_KAFKA_REQUESTED_TOPIC:workflow.action.requested.v1}
+    applied-topic: ${WORKFLOW_KAFKA_APPLIED_TOPIC:workflow.action.applied.v1}
+    consumer-group: ${WORKFLOW_KAFKA_CONSUMER_GROUP:benefit-wf-sku-golive}
+    source-signing-keys: ${WORKFLOW_KAFKA_SOURCE_SIGNING_KEYS:}

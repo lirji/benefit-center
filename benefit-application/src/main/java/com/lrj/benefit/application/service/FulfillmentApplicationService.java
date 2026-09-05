@@ -21,6 +21,9 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
     private final BenefitCatalogRepository catalog;
     private final InventoryRepository inventory;
     private final LedgerRepository ledger;
+    private final WalletRepository wallets;
+    private final UserLimitRepository userLimits;
+    private final UserLimitPrecheck limitPrecheck;
     private final OutboxRepository outbox;
     private final RemediationRepository remediations;
     private final ChannelAdapterRegistry adapters;
@@ -32,7 +35,9 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
 
     public FulfillmentApplicationService(AwardRepository awards, OperationRepository operations,
                                          BenefitCatalogRepository catalog, InventoryRepository inventory,
-                                         LedgerRepository ledger, OutboxRepository outbox,
+                                         LedgerRepository ledger, WalletRepository wallets,
+                                         UserLimitRepository userLimits, UserLimitPrecheck limitPrecheck,
+                                         OutboxRepository outbox,
                                          RemediationRepository remediations, ChannelAdapterRegistry adapters, UnitOfWork unitOfWork,
                                          IdGenerator ids, Clock clock, Duration leaseDuration) {
         this.awards = Objects.requireNonNull(awards);
@@ -40,6 +45,9 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
         this.catalog = Objects.requireNonNull(catalog);
         this.inventory = Objects.requireNonNull(inventory);
         this.ledger = Objects.requireNonNull(ledger);
+        this.wallets = Objects.requireNonNull(wallets);
+        this.userLimits = Objects.requireNonNull(userLimits);
+        this.limitPrecheck = Objects.requireNonNull(limitPrecheck);
         this.outbox = Objects.requireNonNull(outbox);
         this.remediations = Objects.requireNonNull(remediations);
         this.adapters = Objects.requireNonNull(adapters);
@@ -158,12 +166,17 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
                                ChannelAdapter.ChannelResult result, String workerId, Instant now) {
         operation.succeed(workerId, now);
         if (operation.type() == OperationType.REVERSE) {
+            wallets.reverseByItem(order.tenantId(), item.itemNo(), operation.operationNo());
+            reverseUserLimit(order.tenantId(), item.itemNo());
             item.reverseSucceeded();
             inventory.returnIssued(order.tenantId(), item.skuId(), item.quantity(), owners(route),
                     item.itemNo(), operation.operationNo());
             appendLedger(order, item, operation, route, result, -item.quantity(), "REVERSAL", now);
         } else {
             item.succeed();
+            WalletEntry walletEntry = createWalletEntry(order, item, operation, now);
+            item.bindWalletEntry(walletEntry.entryId());
+            userLimits.markIssued(order.tenantId(), item.itemNo());
             inventory.commitReservations(order.tenantId(), operation.operationNo(), owners(route));
             if (route.ownerType() != InventoryOwnerType.CENTER_STOCK
                     && route.reserveMode() == InventoryReserveMode.EAGER) {
@@ -186,6 +199,7 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
         else {
             item.failFinal(errorCode);
             inventory.releaseReservations(operation.tenantId(), operation.operationNo(), allOwners());
+            releaseUserLimit(operation.tenantId(), item.itemNo());
         }
     }
 
@@ -204,25 +218,72 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
             return;
         }
         inventory.releaseReservations(order.tenantId(), operation.operationNo(), allOwners());
+        ChannelRoute fallback;
         try {
-            ChannelRoute fallback = routePolicy.selectFallback(route, catalog.routes(order.tenantId(), item.skuId()), true);
-            String fallbackOperationNo = ids.next("OP");
-            boolean quota = inventory.reserveAvailable(order.tenantId(), item.skuId(), InventoryOwnerType.CENTER_QUOTA,
-                    item.quantity(), item.itemNo(), fallbackOperationNo);
-            boolean stock = fallback.ownerType() != InventoryOwnerType.CENTER_STOCK
-                    || inventory.reserveAvailable(order.tenantId(), item.skuId(), InventoryOwnerType.CENTER_STOCK,
-                    item.quantity(), item.itemNo(), fallbackOperationNo);
-            if (!quota || !stock) {
-                inventory.releaseReservations(order.tenantId(), fallbackOperationNo, allOwners());
-                item.failFinal("FALLBACK_INVENTORY_EXHAUSTED");
-                return;
-            }
-            item.fallbackAfterNotIssued(fallback.routeId());
-            operations.insert(new FulfillmentOperation(order.tenantId(), fallbackOperationNo, item.itemNo(),
-                    OperationType.ISSUE, "fallback:" + order.tenantId() + ':' + item.itemNo() + ':' + fallback.routeId(),
-                    OperationStatus.CREATED, null, null, 0));
+            fallback = routePolicy.selectFallback(route, catalog.routes(order.tenantId(), item.skuId()), true);
         } catch (IllegalStateException noFallback) {
             item.failFinal(result.errorCode());
+            releaseUserLimit(order.tenantId(), item.itemNo());
+            return;
+        }
+        String fallbackOperationNo = ids.next("OP");
+        boolean quota = inventory.reserveAvailable(order.tenantId(), item.skuId(), InventoryOwnerType.CENTER_QUOTA,
+                item.quantity(), item.itemNo(), fallbackOperationNo);
+        boolean stock = fallback.ownerType() != InventoryOwnerType.CENTER_STOCK
+                || inventory.reserveAvailable(order.tenantId(), item.skuId(), InventoryOwnerType.CENTER_STOCK,
+                item.quantity(), item.itemNo(), fallbackOperationNo);
+        if (!quota || !stock) {
+            inventory.releaseReservations(order.tenantId(), fallbackOperationNo, allOwners());
+            item.failFinal("FALLBACK_INVENTORY_EXHAUSTED");
+            releaseUserLimit(order.tenantId(), item.itemNo());
+            return;
+        }
+        item.fallbackAfterNotIssued(fallback.routeId());
+        operations.insert(new FulfillmentOperation(order.tenantId(), fallbackOperationNo, item.itemNo(),
+                OperationType.ISSUE, "fallback:" + order.tenantId() + ':' + item.itemNo() + ':' + fallback.routeId(),
+                OperationStatus.CREATED, null, null, 0));
+    }
+
+    /**
+     * 按订单项固化的模板世代计算资产，不读取当前模板，避免切版改变旧券到期时间。
+     */
+    private WalletEntry createWalletEntry(AwardOrder order, AwardItem item,
+                                          FulfillmentOperation operation, Instant now) {
+        BenefitSku template = catalog.findSkuVersion(order.tenantId(), item.skuId(), item.skuVersion())
+                .orElseThrow(() -> new IllegalStateException("SKU template snapshot is missing: "
+                        + item.skuId() + "@" + item.skuVersion()));
+        Instant expiresAt = switch (template.validityType()) {
+            case ABSOLUTE -> template.validTo();
+            case RELATIVE -> template.relativeDays() == null
+                    ? null : now.plus(Duration.ofDays(template.relativeDays()));
+        };
+        WalletAssetType assetType = switch (item.benefitType()) {
+            case CASH -> WalletAssetType.CASH_BALANCE;
+            case REDEMPTION_CODE -> WalletAssetType.CODE;
+            case PHYSICAL -> WalletAssetType.PHYSICAL;
+            case COUPON, SERVICE_VOUCHER -> WalletAssetType.COUPON;
+        };
+        WalletEntry proposed = new WalletEntry(order.tenantId(), ids.next("WE"), order.recipientRef(),
+                item.skuId(), item.skuVersion(), order.orderNo(), item.itemNo(), assetType,
+                WalletEntryStatus.UNUSED, 0L, expiresAt, template.amountMinor(), template.currency(), now);
+        return wallets.createIfAbsent(proposed, operation.operationNo());
+    }
+
+    private void releaseUserLimit(String tenantId, String itemNo) {
+        invalidateUserLimit(tenantId, itemNo, false);
+    }
+
+    private void reverseUserLimit(String tenantId, String itemNo) {
+        invalidateUserLimit(tenantId, itemNo, true);
+    }
+
+    /** 先取计数键，再变更真账并删除对应 L2 键，防止释放后被旧缓存误拒绝。 */
+    private void invalidateUserLimit(String tenantId, String itemNo, boolean reversal) {
+        List<UserLimitRepository.CounterKey> keys = userLimits.counterKeysForItem(tenantId, itemNo);
+        if (reversal) userLimits.reverse(tenantId, itemNo);
+        else userLimits.release(tenantId, itemNo);
+        for (UserLimitRepository.CounterKey key : keys) {
+            limitPrecheck.invalidate(tenantId, key.subjectRef(), key.skuId(), key.periodType(), key.periodKey());
         }
     }
 
@@ -239,12 +300,14 @@ public final class FulfillmentApplicationService implements ExecuteFulfillmentUs
     private void publishFact(AwardOrder order, AwardItem item, FulfillmentOperation operation, ChannelRoute route,
                              ChannelAdapter.ChannelResult result, Instant now) {
         String entryType = operation.type() == OperationType.REVERSE ? "REVERSAL" : "ISSUE";
-        FulfillmentEvent internal = new FulfillmentEvent(order.orderNo(), item.itemNo(), operation.operationNo(),
+        FulfillmentEvent internal = new FulfillmentEvent(order.orderNo(), item.itemNo(), item.clientItemId(),
+                order.sourceSystem(), order.sourceRequestId(), operation.operationNo(),
                 item.status().name(), route.channelCode(), result.providerReference(), result.errorCode(), now,
                 "INTERNAL", item.skuId(), item.benefitType(), item.quantity(), item.amountMinor(), item.currency(), entryType);
         outbox.enqueue(new MessageEnvelope<>(ids.next("EV"), "FULFILLMENT_INTERNAL", "1.0", order.tenantId(),
                 now, null, item.itemNo(), internal));
-        FulfillmentEvent provider = new FulfillmentEvent(order.orderNo(), item.itemNo(), operation.operationNo(),
+        FulfillmentEvent provider = new FulfillmentEvent(order.orderNo(), item.itemNo(), item.clientItemId(),
+                order.sourceSystem(), order.sourceRequestId(), operation.operationNo(),
                 result.type().name(), route.channelCode(), result.providerReference(), result.errorCode(), now,
                 "PROVIDER", item.skuId(), item.benefitType(), item.quantity(), item.amountMinor(), item.currency(), entryType);
         outbox.enqueue(new MessageEnvelope<>(ids.next("EV"), "FULFILLMENT_PROVIDER", "1.0", order.tenantId(),

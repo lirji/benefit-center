@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_CASDOOR_ORGANIZATION?: string
   readonly VITE_CASDOOR_APP_NAME?: string
   readonly VITE_CASDOOR_SCOPE?: string
+  readonly VITE_WORKFLOW_CONSOLE_ORIGIN?: string
 }
 
 interface ImportMeta {

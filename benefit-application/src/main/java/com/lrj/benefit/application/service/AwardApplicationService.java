@@ -12,6 +12,7 @@ import com.lrj.benefit.domain.service.RoutePolicy;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -21,7 +22,10 @@ import java.util.Set;
 public final class AwardApplicationService implements AcceptAwardIntentUseCase, QueryAwardOrderUseCase {
     private final AwardRepository awards;
     private final BenefitCatalogRepository catalog;
+    private final SkuTemplateCache templateCache;
     private final InventoryRepository inventory;
+    private final UserLimitRepository userLimits;
+    private final UserLimitPrecheck limitPrecheck;
     private final OperationRepository operations;
     private final OutboxRepository outbox;
     private final UnitOfWork unitOfWork;
@@ -32,11 +36,16 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
     private final RoutePolicy routePolicy = new RoutePolicy();
 
     public AwardApplicationService(AwardRepository awards, BenefitCatalogRepository catalog,
-                                   InventoryRepository inventory, OperationRepository operations,
+                                   SkuTemplateCache templateCache, InventoryRepository inventory,
+                                   UserLimitRepository userLimits, UserLimitPrecheck limitPrecheck,
+                                   OperationRepository operations,
                                    OutboxRepository outbox, UnitOfWork unitOfWork, IdGenerator ids, Clock clock) {
         this.awards = Objects.requireNonNull(awards);
         this.catalog = Objects.requireNonNull(catalog);
+        this.templateCache = Objects.requireNonNull(templateCache);
         this.inventory = Objects.requireNonNull(inventory);
+        this.userLimits = Objects.requireNonNull(userLimits);
+        this.limitPrecheck = Objects.requireNonNull(limitPrecheck);
         this.operations = Objects.requireNonNull(operations);
         this.outbox = Objects.requireNonNull(outbox);
         this.unitOfWork = Objects.requireNonNull(unitOfWork);
@@ -80,9 +89,10 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
         for (ItemPlan plan : plans) {
             AwardItemIntent source = plan.intent();
             items.add(new AwardItem(ids.next("BI"), source.clientItemId(), source.benefitSkuId(),
-                    source.benefitType(), source.quantity(), source.amountMinor(), source.currency(),
-                    AwardItemStatus.PENDING, null, null, 0));
+                    plan.sku().version(), source.benefitType(), source.quantity(), source.amountMinor(),
+                    source.currency(), AwardItemStatus.PENDING, null, null, null, 0));
         }
+        reserveUserLimits(command.tenantId(), intent.recipientRef(), items, plans);
         AwardOrder order = new AwardOrder(command.tenantId(), orderNo, intent.sourceSystem(),
                 intent.sourceRequestId(), intent.sourceBusinessNo(), intent.recipientRef(), requestHash,
                 command.homeCell(), items, AwardOrderStatus.ACCEPTED, 0);
@@ -101,7 +111,8 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
         }
         Instant now = clock.instant();
         for (AwardItem item : order.items()) {
-            var expected = new FulfillmentEvent(order.orderNo(), item.itemNo(), null, "EXPECTED",
+            var expected = new FulfillmentEvent(order.orderNo(), item.itemNo(), item.clientItemId(),
+                    order.sourceSystem(), order.sourceRequestId(), null, "EXPECTED",
                     null, null, null, now, "EXPECTED", item.skuId(), item.benefitType(), item.quantity(),
                     item.amountMinor(), item.currency(), "ISSUE");
             outbox.enqueue(new MessageEnvelope<>(ids.next("EV"), "FULFILLMENT_EXPECTED", "1.0", order.tenantId(),
@@ -115,6 +126,7 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
         boolean quota = inventory.reserveAvailable(order.tenantId(), item.skuId(),
                 InventoryOwnerType.CENTER_QUOTA, item.quantity(), item.itemNo(), operationNo);
         if (!quota) {
+            releaseUserLimit(order.tenantId(), item.itemNo());
             item.rejectBeforeDispatch("CENTER_QUOTA_EXHAUSTED");
             insertRejectedOperation(order, item, operationNo, "quota");
             return;
@@ -124,6 +136,7 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
                     InventoryOwnerType.CENTER_STOCK, item.quantity(), item.itemNo(), operationNo);
             if (!stock) {
                 inventory.releaseReservations(order.tenantId(), operationNo, Set.of(InventoryOwnerType.CENTER_QUOTA));
+                releaseUserLimit(order.tenantId(), item.itemNo());
                 item.rejectBeforeDispatch("CENTER_STOCK_EXHAUSTED");
                 insertRejectedOperation(order, item, operationNo, "stock");
                 return;
@@ -145,10 +158,13 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
     private List<ItemPlan> plan(String tenantId, AwardIntent intent) {
         List<ItemPlan> plans = new ArrayList<>();
         for (AwardItemIntent item : intent.items()) {
-            BenefitSku sku = catalog.findSku(tenantId, item.benefitSkuId())
-                    .filter(BenefitSku::enabled)
+            BenefitSku sku = templateCache.findCurrent(tenantId, item.benefitSkuId())
                     .orElseThrow(() -> new BenefitApplicationException(BenefitErrorCode.SKU_NOT_FOUND,
-                            "benefit SKU is missing or disabled: " + item.benefitSkuId()));
+                            "benefit SKU is missing: " + item.benefitSkuId()));
+            if (!sku.acceptsAt(clock.instant())) {
+                throw new BenefitApplicationException(BenefitErrorCode.SKU_NOT_ACTIVE,
+                        "benefit SKU is not ACTIVE in its validity window: " + item.benefitSkuId());
+            }
             if (sku.type() != item.benefitType()) {
                 throw new BenefitApplicationException(BenefitErrorCode.INVALID_INTENT,
                         "benefit type does not match catalog: " + item.benefitSkuId());
@@ -166,7 +182,7 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
                     && routes.stream().anyMatch(candidate -> candidate.enabled()
                     && candidate.routeId().equals(route.fallbackRouteId())
                     && candidate.ownerType() == InventoryOwnerType.CENTER_STOCK));
-            plans.add(new ItemPlan(item, route, reserveCenterStock));
+            plans.add(new ItemPlan(item, sku, route, reserveCenterStock));
         }
         return List.copyOf(plans);
     }
@@ -191,5 +207,59 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " must not be blank");
     }
 
-    private record ItemPlan(AwardItemIntent intent, ChannelRoute route, boolean reserveCenterStock) {}
+    /**
+     * 在库存占用前先做 L2 快速检查，再由数据库条件更新做最终裁决。
+     * 任一订单项失败会抛异常并回滚同事务中已占的其它用户额度。
+     */
+    private void reserveUserLimits(String tenantId, String subjectRef, List<AwardItem> items,
+                                   List<ItemPlan> plans) {
+        LocalDate businessDate = LocalDate.now(clock);
+        String dayKey = businessDate.toString();
+        for (int index = 0; index < plans.size(); index++) {
+            BenefitSku sku = plans.get(index).sku();
+            AwardItem item = items.get(index);
+            if (sku.userLimitPerDay() != null && !limitPrecheck.mayReserve(tenantId, subjectRef, sku.skuId(),
+                    UserLimitRepository.PeriodType.DAY, dayKey, item.quantity(), sku.userLimitPerDay())) {
+                throw limitExceeded(sku.skuId(), "DAY");
+            }
+            if (sku.userLimitTotal() != null && !limitPrecheck.mayReserve(tenantId, subjectRef, sku.skuId(),
+                    UserLimitRepository.PeriodType.TOTAL, "ALL", item.quantity(), sku.userLimitTotal())) {
+                throw limitExceeded(sku.skuId(), "TOTAL");
+            }
+            if (!userLimits.reserve(tenantId, subjectRef, sku.skuId(), item.itemNo(), item.quantity(),
+                    sku.userLimitPerDay(), sku.userLimitTotal(), businessDate)) {
+                throw limitExceeded(sku.skuId(), "DATABASE_CAS");
+            }
+            invalidateLimitKeys(tenantId, subjectRef, sku.skuId(), dayKey,
+                    sku.userLimitPerDay(), sku.userLimitTotal());
+        }
+    }
+
+    private void releaseUserLimit(String tenantId, String itemNo) {
+        List<UserLimitRepository.CounterKey> keys = userLimits.counterKeysForItem(tenantId, itemNo);
+        userLimits.release(tenantId, itemNo);
+        for (UserLimitRepository.CounterKey key : keys) {
+            limitPrecheck.invalidate(tenantId, key.subjectRef(), key.skuId(), key.periodType(), key.periodKey());
+        }
+    }
+
+    private void invalidateLimitKeys(String tenantId, String subjectRef, String skuId, String dayKey,
+                                     Long dailyLimit, Long totalLimit) {
+        if (dailyLimit != null) {
+            limitPrecheck.invalidate(tenantId, subjectRef, skuId,
+                    UserLimitRepository.PeriodType.DAY, dayKey);
+        }
+        if (totalLimit != null) {
+            limitPrecheck.invalidate(tenantId, subjectRef, skuId,
+                    UserLimitRepository.PeriodType.TOTAL, "ALL");
+        }
+    }
+
+    private static BenefitApplicationException limitExceeded(String skuId, String period) {
+        return new BenefitApplicationException(BenefitErrorCode.USER_LIMIT_EXCEEDED,
+                "user limit exceeded for SKU " + skuId + " (" + period + ")");
+    }
+
+    private record ItemPlan(AwardItemIntent intent, BenefitSku sku, ChannelRoute route,
+                            boolean reserveCenterStock) {}
 }

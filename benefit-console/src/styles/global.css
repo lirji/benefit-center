@@ -121,6 +121,10 @@ textarea {
   flex: 0 0 auto;
 }
 
+.wallet-entry-actions .ant-btn {
+  min-height: 44px;
+}
+
 .metric-card {
   position: relative;
   min-height: 174px;
@@ -480,6 +484,13 @@ textarea {
 
   .ant-drawer-extra .ant-btn {
     padding-inline: 10px;
+  }
+
+  .wallet-entry-actions,
+  .wallet-entry-actions .ant-space,
+  .wallet-entry-actions .ant-space-item,
+  .wallet-entry-actions .ant-btn {
+    width: 100%;
   }
 }
 

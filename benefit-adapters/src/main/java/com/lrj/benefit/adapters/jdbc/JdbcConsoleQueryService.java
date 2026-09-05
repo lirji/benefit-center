@@ -5,6 +5,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Arrays;
+import com.lrj.benefit.domain.model.SkuTemplateStatus;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,9 +16,11 @@ import java.util.Optional;
 public final class JdbcConsoleQueryService implements ConsoleQueryUseCase {
     private static final int MAX_LIMIT = 50;
     private final JdbcTemplate jdbc;
+    private final Clock clock;
 
-    public JdbcConsoleQueryService(JdbcTemplate jdbc) {
+    public JdbcConsoleQueryService(JdbcTemplate jdbc, Clock clock) {
         this.jdbc = jdbc;
+        this.clock = clock;
     }
 
     @Override
@@ -29,7 +35,9 @@ public final class JdbcConsoleQueryService implements ConsoleQueryUseCase {
                 count(tenantId, "SELECT COUNT(*) FROM bc_award_order WHERE tenant_id=? AND status='PARTIAL_SUCCEEDED'"),
                 count(tenantId, "SELECT COUNT(*) FROM bc_remediation_order WHERE tenant_id=? AND status IN ('PROPOSED','APPROVED','DISPATCHING','UNKNOWN')"),
                 count(tenantId, "SELECT COUNT(*) FROM bc_benefit_sku WHERE tenant_id=?"),
-                count(tenantId, "SELECT COUNT(*) FROM bc_channel_route WHERE tenant_id=? AND enabled=TRUE"));
+                count(tenantId, "SELECT COUNT(*) FROM bc_channel_route WHERE tenant_id=? AND enabled=TRUE"),
+                count(tenantId, "SELECT COUNT(*) FROM bc_benefit_sku WHERE tenant_id=? AND status='ACTIVE'"),
+                countSince(tenantId, clock.instant().minus(Duration.ofHours(24))));
     }
 
     @Override
@@ -42,13 +50,29 @@ public final class JdbcConsoleQueryService implements ConsoleQueryUseCase {
     }
 
     @Override
-    public List<SkuView> listSkus(String tenantId, int limit) {
+    public List<SkuView> listSkus(String tenantId, String status, String afterSkuId, int limit) {
+        String normalizedStatus = templateStatus(status);
+        String after = blankToNull(afterSkuId);
         return jdbc.query("""
-                SELECT sku_id,benefit_type,face_value_minor,currency,status,version
-                FROM bc_benefit_sku WHERE tenant_id=? ORDER BY sku_id LIMIT ?
-                """, (rs, row) -> new SkuView(rs.getString("sku_id"), rs.getString("benefit_type"),
-                (Long) rs.getObject("face_value_minor"), rs.getString("currency"),
-                "ENABLED".equals(rs.getString("status")), rs.getLong("version")), tenantId, bound(limit));
+                SELECT sku_id,benefit_type,face_value_minor,currency,status,validity_type,valid_from,valid_to,
+                       relative_days,usable_weekdays,daily_quota,user_limit_per_day,user_limit_total,
+                       equivalent_sku_id,version
+                FROM bc_benefit_sku
+                WHERE tenant_id=? AND (? IS NULL OR status=?) AND (? IS NULL OR sku_id>?)
+                ORDER BY sku_id LIMIT ?
+                """, (rs, row) -> {
+            String storedStatus = normalizedStatus(rs.getString("status"));
+            return new SkuView(rs.getString("sku_id"), rs.getString("benefit_type"),
+                    (Long) rs.getObject("face_value_minor"), rs.getString("currency"), storedStatus,
+                    "ACTIVE".equals(storedStatus), rs.getString("validity_type"),
+                    timestamp(rs.getTimestamp("valid_from")), timestamp(rs.getTimestamp("valid_to")),
+                    (Integer) rs.getObject("relative_days"), weekdays(rs.getString("usable_weekdays")),
+                    (Long) rs.getObject("daily_quota"), (Long) rs.getObject("user_limit_per_day"),
+                    (Long) rs.getObject("user_limit_total"), rs.getString("equivalent_sku_id"),
+                    "PENDING_APPROVAL".equals(storedStatus) ? "benefitSkuGoLive" : null,
+                    "PENDING_APPROVAL".equals(storedStatus) ? rs.getString("sku_id") : null,
+                    rs.getLong("version"));
+        }, tenantId, normalizedStatus, normalizedStatus, after, after, bound(limit));
     }
 
     @Override
@@ -157,6 +181,13 @@ public final class JdbcConsoleQueryService implements ConsoleQueryUseCase {
         return value == null ? 0 : value;
     }
 
+    private long countSince(String tenantId, Instant since) {
+        Long value = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bc_wallet_entry WHERE tenant_id=? AND created_at>=?
+                """, Long.class, tenantId, Timestamp.from(since));
+        return value == null ? 0 : value;
+    }
+
     private static int bound(int limit) {
         if (limit < 1) return 20;
         return Math.min(limit, MAX_LIMIT);
@@ -164,5 +195,25 @@ public final class JdbcConsoleQueryService implements ConsoleQueryUseCase {
 
     private static Instant timestamp(Timestamp value) {
         return value == null ? null : value.toInstant();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private static String normalizedStatus(String value) {
+        if ("ENABLED".equals(value)) return "ACTIVE";
+        if ("DISABLED".equals(value)) return "DRAFT";
+        return value;
+    }
+
+    private static String templateStatus(String value) {
+        String normalized = blankToNull(value);
+        return normalized == null ? null : SkuTemplateStatus.valueOf(normalized).name();
+    }
+
+    private static List<Integer> weekdays(String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        return Arrays.stream(csv.split(",")).map(Integer::valueOf).toList();
     }
 }

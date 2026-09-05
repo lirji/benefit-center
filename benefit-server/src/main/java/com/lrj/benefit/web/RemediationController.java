@@ -14,13 +14,21 @@ public class RemediationController {
     public RemediationController(ExecuteRemediationUseCase useCase) { this.useCase = useCase; }
 
     @PostMapping
-    public RemediationResult accept(@Valid @RequestBody RemediationCommand command) {
+    public RemediationResult accept(@RequestHeader("Idempotency-Key") String idempotencyKey,
+                                    @Valid @RequestBody RemediationCommand command) {
+        if (!idempotencyKey.equals(command.externalCommandId())) {
+            throw new IllegalArgumentException("Idempotency-Key must equal externalCommandId");
+        }
         return useCase.accept(TenantContext.required(), command);
     }
 
     @PostMapping("/{remediationNo}/execute")
     public RemediationResult execute(@PathVariable String remediationNo,
+                                     @RequestHeader("Idempotency-Key") String idempotencyKey,
                                      @RequestHeader(value = "X-Worker-Id", defaultValue = "api") String workerId) {
+        if (!idempotencyKey.equals(remediationNo)) {
+            throw new IllegalArgumentException("Idempotency-Key must equal remediationNo for execute");
+        }
         return useCase.execute(TenantContext.required(), remediationNo, workerId);
     }
 

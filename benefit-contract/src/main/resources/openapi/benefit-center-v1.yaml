@@ -11,6 +11,7 @@ security:
   - bearerAuth: []
 tags:
   - name: Awards
+  - name: Wallet
   - name: Remediation
   - name: Administration
   - name: Console
@@ -84,6 +85,84 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AwardOrder' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /openapi/v1/wallet-entries/{entryId}:freeze:
+    post:
+      tags: [Wallet]
+      operationId: freezeWalletEntry
+      summary: Synchronously freeze an unused wallet entry with CAS
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/WalletEntryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WalletEntryCommand' }
+      responses:
+        '202':
+          description: State and version were committed, or the first result was replayed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletEntryCommandAcceptance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /openapi/v1/wallet-entries/{entryId}:redeem:
+    post:
+      tags: [Wallet]
+      operationId: redeemWalletEntry
+      summary: Synchronously redeem an unused or frozen wallet entry with CAS
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/WalletEntryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WalletEntryCommand' }
+      responses:
+        '202':
+          description: State, ledger, and fact were committed, or the first result was replayed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletEntryCommandAcceptance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /openapi/v1/wallet-entries/{entryId}:refund:
+    post:
+      tags: [Wallet]
+      operationId: refundWalletEntry
+      summary: Synchronously refund a used wallet entry with CAS
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/WalletEntryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WalletEntryCommand' }
+      responses:
+        '202':
+          description: State, ledger, and fact were committed, or the first result was replayed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletEntryCommandAcceptance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /internal/v1/remediations:
     post:
       tags: [Remediation]
@@ -92,6 +171,8 @@ paths:
       description: UNKNOWN original operations are rejected. Non-manual actions require approvalRef.
       security:
         - bearerAuth: [benefit.remediate]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -128,6 +209,7 @@ paths:
         - bearerAuth: [benefit.remediate]
       parameters:
         - $ref: '#/components/parameters/RemediationNo'
+        - $ref: '#/components/parameters/IdempotencyKey'
         - in: header
           name: X-Worker-Id
           schema: { type: string, maxLength: 128 }
@@ -142,9 +224,11 @@ paths:
     put:
       tags: [Administration]
       operationId: upsertBenefitSku
+      description: PENDING_APPROVAL templates are immutable. Clients cannot move DRAFT templates to PENDING_APPROVAL or ACTIVE.
       security:
         - bearerAuth: [benefit.admin]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
         - in: path
           name: skuId
           required: true
@@ -156,6 +240,34 @@ paths:
             schema: { $ref: '#/components/schemas/SkuCommand' }
       responses:
         '204': { description: Saved }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/skus/{skuId}:submit-for-approval:
+    post:
+      tags: [Administration]
+      operationId: submitBenefitSkuForApproval
+      description: Atomically moves a DRAFT template to PENDING_APPROVAL and enqueues workflow.command.start.v1.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: path
+          name: skuId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuSubmitCommand' }
+      responses:
+        '202':
+          description: Approval submission accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkuSubmitAcceptance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/v1/tenants/{tenantId}:
     put:
       tags: [Administration]
@@ -164,6 +276,7 @@ paths:
       security:
         - bearerAuth: [benefit.admin]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
         - in: path
           name: tenantId
           required: true
@@ -182,6 +295,7 @@ paths:
       security:
         - bearerAuth: [benefit.admin]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
         - in: path
           name: routeId
           required: true
@@ -199,6 +313,8 @@ paths:
       operationId: adjustCenterInventory
       security:
         - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -269,6 +385,13 @@ paths:
       security:
         - bearerAuth: [benefit.admin]
       parameters:
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/SkuTemplateStatus' }
+        - in: query
+          name: afterSkuId
+          description: Seek cursor; return rows whose skuId is greater than this value.
+          schema: { type: string, maxLength: 128 }
         - $ref: '#/components/parameters/ConsoleLimit'
       responses:
         '200':
@@ -278,6 +401,49 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/SkuView' }
+  /admin/v1/wallets/{subjectRef}:
+    get:
+      tags: [Console]
+      operationId: getWallet
+      summary: Get a tenant-scoped customer wallet summary
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/SubjectRef'
+      responses:
+        '200':
+          description: Wallet summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletView' }
+  /admin/v1/wallets/{subjectRef}/entries:
+    get:
+      tags: [Console]
+      operationId: listWalletEntries
+      summary: List wallet entries with seek pagination
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/SubjectRef'
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/WalletEntryStatus' }
+        - in: query
+          name: skuId
+          schema: { type: string, maxLength: 128 }
+        - in: query
+          name: afterEntryId
+          description: Seek cursor; return rows whose entryId is greater than this value.
+          schema: { type: string, maxLength: 64 }
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: Wallet entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WalletEntryView' }
   /admin/v1/routes:
     get:
       tags: [Console]
@@ -357,6 +523,8 @@ paths:
       operationId: importEncryptedCodeAsset
       security:
         - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -418,26 +586,36 @@ components:
       name: remediationNo
       required: true
       schema: { type: string, maxLength: 64 }
+    WalletEntryId:
+      in: path
+      name: entryId
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 64 }
     ConsoleLimit:
       in: query
       name: limit
       schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    SubjectRef:
+      in: path
+      name: subjectRef
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 256 }
   responses:
     BadRequest:
       description: Invalid intent or command
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
     Unauthorized:
       description: Missing or invalid authentication
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
     Forbidden:
       description: Missing scope, invalid tenant mapping, or cross-tenant envelope
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
     Conflict:
       description: Idempotency payload conflict or invalid state transition
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
     NotFound:
       description: Resource not found in the authenticated tenant
-      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
   schemas:
     AwardIntent:
       type: object
@@ -493,12 +671,13 @@ components:
         replay: { type: boolean }
     AwardOrder:
       type: object
-      required: [orderNo, sourceSystem, sourceRequestId, status, homeCell, items]
+      required: [orderNo, sourceSystem, sourceRequestId, recipientRef, status, homeCell, items]
       properties:
         orderNo: { type: string }
         sourceSystem: { type: string }
         sourceRequestId: { type: string }
         sourceBusinessNo: { type: string, nullable: true }
+        recipientRef: { type: string }
         status: { $ref: '#/components/schemas/AwardOrderStatus' }
         homeCell: { type: string }
         items:
@@ -524,6 +703,8 @@ components:
         failureCode: { type: string, nullable: true }
         latestOperationNo: { type: string, nullable: true }
         latestOperationStatus: { type: string, nullable: true }
+        skuVersion: { type: integer, format: int64, minimum: 0 }
+        walletEntryId: { type: string, nullable: true }
     RemediationCommand:
       type: object
       additionalProperties: false
@@ -553,14 +734,47 @@ components:
         expectedVersion: { type: integer, format: int64, nullable: true }
     SkuCommand:
       type: object
-      required: [skuId, benefitType, enabled]
+      required: [skuId, benefitType]
       properties:
         skuId: { type: string }
         benefitType: { $ref: '#/components/schemas/BenefitType' }
         faceValueMinor: { type: integer, format: int64, nullable: true }
         currency: { type: string, nullable: true }
-        enabled: { type: boolean }
+        enabled: { type: boolean, nullable: true, deprecated: true, description: Compatibility input; status is authoritative. }
+        status: { $ref: '#/components/schemas/SkuTemplateStatus' }
+        validityType: { $ref: '#/components/schemas/ValidityType' }
+        validFrom: { type: string, format: date-time, nullable: true }
+        validTo: { type: string, format: date-time, nullable: true }
+        relativeDays: { type: integer, minimum: 1, nullable: true }
+        usableWeekdays:
+          type: array
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 7 }
+        dailyQuota: { type: integer, format: int64, minimum: 1, nullable: true }
+        userLimitPerDay: { type: integer, format: int64, minimum: 1, nullable: true }
+        userLimitTotal: { type: integer, format: int64, minimum: 1, nullable: true }
+        equivalentSkuId: { type: string, maxLength: 128, nullable: true }
         expectedVersion: { type: integer, format: int64, nullable: true }
+    SkuSubmitCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, format: int64, minimum: 0 }
+    SkuSubmitAcceptance:
+      type: object
+      additionalProperties: false
+      required: [skuId, status, version]
+      properties:
+        skuId: { type: string, maxLength: 128 }
+        status: { type: string, enum: [PENDING_APPROVAL] }
+        version: { type: integer, format: int64, minimum: 1 }
+    SkuTemplateStatus:
+      type: string
+      enum: [DRAFT, PENDING_APPROVAL, ACTIVE, PAUSED, RETIRED]
+    ValidityType:
+      type: string
+      enum: [ABSOLUTE, RELATIVE]
     RouteCommand:
       type: object
       required: [routeId, skuId, priority, channelCode, ownerType, reserveMode, enabled]
@@ -607,13 +821,15 @@ components:
           items: { type: string }
     ConsoleOverview:
       type: object
-      required: [unknownOps, partialOrders, pendingRemediations, skuCount, enabledRoutes]
+      required: [unknownOps, partialOrders, pendingRemediations, skuCount, enabledRoutes, activeTemplateCount, walletIssued24h]
       properties:
         unknownOps: { type: integer, format: int64 }
         partialOrders: { type: integer, format: int64 }
         pendingRemediations: { type: integer, format: int64 }
         skuCount: { type: integer, format: int64 }
         enabledRoutes: { type: integer, format: int64 }
+        activeTemplateCount: { type: integer, format: int64 }
+        walletIssued24h: { type: integer, format: int64 }
     TenantView:
       type: object
       required: [tenantId, homeCell, enabled, version]
@@ -624,14 +840,85 @@ components:
         version: { type: integer, format: int64 }
     SkuView:
       type: object
-      required: [skuId, benefitType, enabled, version]
+      required: [skuId, benefitType, status, enabled, validityType, usableWeekdays, version]
       properties:
         skuId: { type: string }
         benefitType: { $ref: '#/components/schemas/BenefitType' }
         faceValueMinor: { type: integer, format: int64, nullable: true }
         currency: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/SkuTemplateStatus' }
         enabled: { type: boolean }
+        validityType: { $ref: '#/components/schemas/ValidityType' }
+        validFrom: { type: string, format: date-time, nullable: true }
+        validTo: { type: string, format: date-time, nullable: true }
+        relativeDays: { type: integer, nullable: true }
+        usableWeekdays:
+          type: array
+          items: { type: integer }
+        dailyQuota: { type: integer, format: int64, nullable: true }
+        userLimitPerDay: { type: integer, format: int64, nullable: true }
+        userLimitTotal: { type: integer, format: int64, nullable: true }
+        equivalentSkuId: { type: string, nullable: true }
+        approvalProcessDefinitionKey:
+          type: string
+          nullable: true
+          description: Present only while status is PENDING_APPROVAL; value is benefitSkuGoLive.
+        approvalBusinessKey:
+          type: string
+          nullable: true
+          description: Present only while status is PENDING_APPROVAL; value is skuId.
         version: { type: integer, format: int64 }
+    WalletEntryStatus:
+      type: string
+      enum: [UNUSED, FROZEN, USED, EXPIRED, REVERSED]
+    WalletEntryCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 512, nullable: true }
+        merchantRef: { type: string, maxLength: 256, nullable: true }
+        expectedVersion: { type: integer, format: int64, minimum: 0, nullable: true }
+    WalletEntryCommandAcceptance:
+      type: object
+      additionalProperties: false
+      required: [entryId, status, version]
+      properties:
+        entryId: { type: string, maxLength: 64 }
+        status: { $ref: '#/components/schemas/WalletEntryStatus' }
+        version: { type: integer, format: int64, minimum: 1 }
+    WalletView:
+      type: object
+      required: [subjectRef, totalEntries, unusedEntries, cashBalances]
+      properties:
+        subjectRef: { type: string }
+        totalEntries: { type: integer, format: int64 }
+        unusedEntries: { type: integer, format: int64 }
+        cashBalances:
+          type: array
+          items: { $ref: '#/components/schemas/CashBalanceView' }
+    CashBalanceView:
+      type: object
+      required: [currency, balanceMinor]
+      properties:
+        currency: { type: string }
+        balanceMinor: { type: integer, format: int64 }
+    WalletEntryView:
+      type: object
+      required: [entryId, subjectRef, skuId, skuVersion, awardOrderNo, itemNo, assetType, status, version, createdAt]
+      properties:
+        entryId: { type: string }
+        subjectRef: { type: string }
+        skuId: { type: string }
+        skuVersion: { type: integer, format: int64 }
+        awardOrderNo: { type: string }
+        itemNo: { type: string }
+        assetType: { type: string, enum: [COUPON, CASH_BALANCE, CODE, PHYSICAL] }
+        status: { $ref: '#/components/schemas/WalletEntryStatus' }
+        version: { type: integer, format: int64, minimum: 0 }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        faceValueMinor: { type: integer, format: int64, nullable: true }
+        currency: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
     RouteView:
       type: object
       required: [routeId, skuId, priority, channelCode, ownerType, reserveMode, enabled, version]
@@ -689,9 +976,16 @@ components:
         expiresAt: { type: string, format: date-time, nullable: true }
     Error:
       type: object
-      required: [code, message]
+      description: RFC 9457 Problem Details with a stable business code.
+      required: [type, title, status, detail, code, timestamp]
       properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer, format: int32 }
+        detail: { type: string }
+        instance: { type: string, format: uri, nullable: true }
         code:
           type: string
-          enum: [INVALID_INTENT, IDEMPOTENCY_PAYLOAD_CONFLICT, SKU_NOT_FOUND, INVENTORY_INSUFFICIENT, CHANNEL_RETRYABLE, CHANNEL_FINAL_FAILURE, CHANNEL_RESULT_UNKNOWN, REMEDIATION_NOT_ALLOWED, INTERNAL_ERROR]
-        message: { type: string }
+          enum: [INVALID_INTENT, IDEMPOTENCY_PAYLOAD_CONFLICT, SKU_NOT_FOUND, SKU_NOT_ACTIVE, SKU_NOT_DRAFT, SKU_VERSION_CONFLICT, SKU_APPROVAL_LOCKED, SKU_ILLEGAL_TRANSITION, SKU_SUBMIT_IN_FLIGHT, WALLET_ENTRY_NOT_FOUND, WALLET_ILLEGAL_TRANSITION, WALLET_ALREADY_USED, WALLET_VERSION_CONFLICT, WALLET_EXPIRED, USER_LIMIT_EXCEEDED, INVENTORY_INSUFFICIENT, CHANNEL_RETRYABLE, CHANNEL_FINAL_FAILURE, CHANNEL_RESULT_UNKNOWN, REMEDIATION_NOT_ALLOWED, INTERNAL_ERROR]
+        message: { type: string, deprecated: true, description: Compatibility alias of detail. }
+        timestamp: { type: string, format: date-time }

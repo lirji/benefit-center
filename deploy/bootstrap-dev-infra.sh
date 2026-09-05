@@ -23,6 +23,10 @@ source "${PROJECT_ENV_FILE}"
 set +a
 
 BENEFIT_DB_NAME="${BENEFIT_DB_NAME:-benefit_center}"
+if [[ "${BENEFIT_REDIS_PASSWORD:-}" != "${REDIS7_PASSWORD:-}" ]]; then
+  echo "BENEFIT_REDIS_PASSWORD must match REDIS7_PASSWORD from dev-infra/.env." >&2
+  exit 1
+fi
 for value in "${BENEFIT_DB_NAME}" "${BENEFIT_DB_USER}" "${BENEFIT_DB_PASSWORD}"; do
   if [[ ! "${value}" =~ ^[A-Za-z0-9_-]+$ ]]; then
     echo "Database name, user and password may only contain letters, digits, _ and -." >&2
@@ -31,10 +35,10 @@ for value in "${BENEFIT_DB_NAME}" "${BENEFIT_DB_USER}" "${BENEFIT_DB_PASSWORD}";
 done
 
 export DEV_INFRA_ENV_FILE
-"${DEV_INFRA_DIR}/bin/dev-infra" up mysql84 kafka38
+"${DEV_INFRA_DIR}/bin/dev-infra" up mysql84 redis7 kafka38
 
 compose=(docker compose --env-file "${DEV_INFRA_ENV_FILE}" -f "${DEV_INFRA_COMPOSE_FILE}")
-"${compose[@]}" up -d --wait --wait-timeout 120 mysql84 kafka38
+"${compose[@]}" up -d --wait --wait-timeout 120 mysql84 redis7 kafka38
 
 "${compose[@]}" exec -T -e MYSQL_PWD="${MYSQL84_ROOT_PASSWORD}" mysql84 \
   mysql --protocol=socket -uroot <<SQL
@@ -51,6 +55,7 @@ topics=(
   benefit.fulfillment-event.v1
   benefit.remediation.command.v1
   benefit.remediation.result.v1
+  benefit.sku-template.v1
 )
 for topic in "${topics[@]}"; do
   "${compose[@]}" exec -T kafka38 /opt/kafka/bin/kafka-topics.sh \

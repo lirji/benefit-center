@@ -56,8 +56,10 @@ public class ConsoleQueryController {
     }
 
     @GetMapping("/skus")
-    public List<SkuView> skus(@RequestParam(defaultValue = "20") int limit) {
-        return queries.listSkus(tenant(), limit);
+    public List<SkuView> skus(@RequestParam(required = false) String status,
+                              @RequestParam(required = false) String afterSkuId,
+                              @RequestParam(defaultValue = "20") int limit) {
+        return queries.listSkus(tenant(), status, afterSkuId, limit);
     }
 
     @GetMapping("/routes")
@@ -110,6 +112,7 @@ public class ConsoleQueryController {
                 .map(GrantedAuthority::getAuthority)
                 .map(value -> value.startsWith("SCOPE_") ? value.substring(6) : value)
                 .filter(value -> value.startsWith("benefit."))
+                .distinct()
                 .toList();
     }
 }

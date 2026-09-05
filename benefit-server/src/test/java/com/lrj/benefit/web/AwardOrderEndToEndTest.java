@@ -103,6 +103,7 @@ class AwardOrderEndToEndTest {
 
         mvc.perform(get("/openapi/v1/award-orders/{orderNo}", orderNo).header("X-Tenant-Id", "T1"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recipientRef").value("recipient:1"))
                 .andExpect(jsonPath("$.status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.items[0].status").value("SUCCEEDED"));
 

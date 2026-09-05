@@ -11,8 +11,13 @@ import type {
   RemediationView,
   RouteView,
   SkuView,
+  SkuSubmitAcceptance,
   TenantView,
   UserSession,
+  WalletEntryCommand,
+  WalletEntryCommandAcceptance,
+  WalletEntryView,
+  WalletView,
 } from './types'
 
 export function getMe(): Promise<UserSession> {
@@ -60,14 +65,55 @@ export async function findAwardOrder(sourceSystem: string, sourceRequestId: stri
 export const getRemediation = (remediationNo: string) =>
   api.get<RemediationResult>(`/internal/v1/remediations/${encodeURIComponent(remediationNo)}`).then((r) => r.data)
 export const acceptRemediation = (command: RemediationCommand) =>
-  api.post<RemediationResult>('/internal/v1/remediations', command).then((r) => r.data)
+  api
+    .post<RemediationResult>('/internal/v1/remediations', command, {
+      headers: { 'Idempotency-Key': command.externalCommandId },
+    })
+    .then((r) => r.data)
 export const executeRemediation = (remediationNo: string) =>
-  api.post<RemediationResult>(`/internal/v1/remediations/${encodeURIComponent(remediationNo)}/execute`).then((r) => r.data)
+  api
+    .post<RemediationResult>(`/internal/v1/remediations/${encodeURIComponent(remediationNo)}/execute`, undefined, {
+      headers: { 'Idempotency-Key': remediationNo },
+    })
+    .then((r) => r.data)
+
+export async function getWallet(subjectRef: string): Promise<WalletView> {
+  try {
+    return (await api.get<WalletView>(`/admin/v1/wallets/${encodeURIComponent(subjectRef)}`)).data
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) throw new ApiError('该用户暂无权益', 404, 'WALLET_NOT_FOUND')
+    throw error
+  }
+}
+
+export const listWalletEntries = (subjectRef: string, params?: { status?: string; skuId?: string; limit?: number }) =>
+  api.get<WalletEntryView[]>(`/admin/v1/wallets/${encodeURIComponent(subjectRef)}/entries`, { params }).then((r) => r.data)
+
+export type WalletEntryAction = 'freeze' | 'redeem' | 'refund'
+
+export function commandWalletEntry(
+  entryId: string,
+  action: WalletEntryAction,
+  body: WalletEntryCommand,
+  idempotencyKey: string,
+) {
+  return api
+    .post<WalletEntryCommandAcceptance>(
+      `/openapi/v1/wallet-entries/${encodeURIComponent(entryId)}:${action}`,
+      body,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
+    )
+    .then((r) => r.data)
+}
 
 export const saveTenant = (tenantId: string, body: object) =>
   api.put(`/admin/v1/tenants/${encodeURIComponent(tenantId)}`, body)
 export const saveSku = (skuId: string, body: object) =>
   api.put(`/admin/v1/skus/${encodeURIComponent(skuId)}`, body)
+export const submitSkuApproval = (skuId: string, body: { expectedVersion: number }) =>
+  api
+    .post<SkuSubmitAcceptance>(`/admin/v1/skus/${encodeURIComponent(skuId)}:submit-for-approval`, body)
+    .then((r) => r.data)
 export const saveRoute = (routeId: string, body: object) =>
   api.put(`/admin/v1/routes/${encodeURIComponent(routeId)}`, body)
 export const adjustInventory = (body: object) => api.post('/admin/v1/inventory/adjustments', body)

@@ -1,7 +1,7 @@
 asyncapi: 2.6.0
 info:
   title: Enterprise Benefit Center Events
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Kafka contracts are at-least-once. Producers use transactional outbox and consumers deduplicate by
     (tenantId, consumerGroup, eventId). Unknown major schema versions must be rejected or sent to a DLQ.
@@ -13,7 +13,7 @@ channels:
       operationId: consumeAwardIntent
       message: { $ref: '#/components/messages/AwardIntentEnvelope' }
   benefit.fulfillment-event.v1:
-    description: Expected, internal-ledger, and provider fulfillment facts used by queries and reconciliation.
+    description: Expected, internal-ledger, provider, and wallet-state facts used by queries and reconciliation.
     publish:
       operationId: publishFulfillmentFact
       message: { $ref: '#/components/messages/FulfillmentEnvelope' }
@@ -27,6 +27,26 @@ channels:
     publish:
       operationId: publishRemediationResult
       message: { $ref: '#/components/messages/RemediationResultEnvelope' }
+  benefit.sku-template.v1:
+    description: Immutable SKU template generations for cache invalidation and downstream read projections.
+    publish:
+      operationId: publishSkuTemplateChanged
+      message: { $ref: '#/components/messages/SkuTemplateChangedEnvelope' }
+  workflow.command.start.v1:
+    description: Starts benefitSkuGoLive after the local SKU transaction commits.
+    publish:
+      operationId: publishSkuGoLiveStart
+      message: { $ref: '#/components/messages/WorkflowStartEnvelope' }
+  workflow.action.requested.v1:
+    description: Requests benefit-center to apply a SKU go-live approval decision.
+    subscribe:
+      operationId: consumeSkuGoLiveAction
+      message: { $ref: '#/components/messages/WorkflowActionRequestedEnvelope' }
+  workflow.action.applied.v1:
+    description: Acknowledges the durable benefit-center outcome so workflow can continue.
+    publish:
+      operationId: publishSkuGoLiveApplied
+      message: { $ref: '#/components/messages/WorkflowActionAppliedEnvelope' }
 components:
   messages:
     AwardIntentEnvelope:
@@ -50,8 +70,11 @@ components:
           - type: object
             properties:
               eventType:
-                enum: [FULFILLMENT_EXPECTED, FULFILLMENT_INTERNAL, FULFILLMENT_PROVIDER]
-              payload: { $ref: '#/components/schemas/FulfillmentEvent' }
+                enum: [FULFILLMENT_EXPECTED, FULFILLMENT_INTERNAL, FULFILLMENT_PROVIDER, FULFILLMENT_WALLET]
+              payload:
+                oneOf:
+                  - $ref: '#/components/schemas/FulfillmentEvent'
+                  - $ref: '#/components/schemas/WalletFulfillmentEvent'
     RemediationCommandEnvelope:
       name: RemediationCommandEnvelope
       messageId: RemediationCommand
@@ -72,6 +95,49 @@ components:
             properties:
               eventType: { enum: [REMEDIATION_DISPATCHED, REMEDIATION_RESULT] }
               payload: { $ref: '#/components/schemas/RemediationResult' }
+    SkuTemplateChangedEnvelope:
+      name: SkuTemplateChangedEnvelope
+      messageId: SkuTemplateChanged
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              eventType: { const: SKU_TEMPLATE_CHANGED }
+              payload: { $ref: '#/components/schemas/SkuTemplateChanged' }
+    WorkflowStartEnvelope:
+      name: WorkflowStartEnvelope
+      messageId: WorkflowStart
+      correlationId: { location: '$message.payload#/correlationId' }
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/WorkflowEnvelope'
+          - type: object
+            properties:
+              eventType: { const: workflow.command.start.v1 }
+              payload: { $ref: '#/components/schemas/StartProcessCommandV1' }
+    WorkflowActionRequestedEnvelope:
+      name: WorkflowActionRequestedEnvelope
+      messageId: WorkflowActionRequested
+      correlationId: { location: '$message.payload#/correlationId' }
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/WorkflowEnvelope'
+          - type: object
+            properties:
+              eventType: { const: workflow.action.requested.v1 }
+              payload: { $ref: '#/components/schemas/WorkflowActionRequestedV1' }
+    WorkflowActionAppliedEnvelope:
+      name: WorkflowActionAppliedEnvelope
+      messageId: WorkflowActionApplied
+      correlationId: { location: '$message.payload#/correlationId' }
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/WorkflowEnvelope'
+          - type: object
+            properties:
+              eventType: { const: workflow.action.applied.v1 }
+              payload: { $ref: '#/components/schemas/WorkflowActionAppliedV1' }
   schemas:
     Envelope:
       type: object
@@ -127,10 +193,13 @@ components:
     FulfillmentEvent:
       type: object
       additionalProperties: false
-      required: [awardOrderNo, awardItemNo, status, occurredAt, factType, skuId, benefitType, quantity, entryType]
+      required: [awardOrderNo, awardItemNo, clientItemId, sourceSystem, sourceRequestId, status, occurredAt, factType, skuId, benefitType, quantity, entryType]
       properties:
         awardOrderNo: { type: string }
         awardItemNo: { type: string }
+        clientItemId: { type: string, description: 上游稳定项 ID，用于与营销应发事实勾稽 }
+        sourceSystem: { type: string }
+        sourceRequestId: { type: string, description: 跨系统幂等请求号 }
         operationNo: { type: string }
         status: { type: string }
         channelCode: { type: string }
@@ -143,8 +212,25 @@ components:
         quantity: { type: integer, minimum: 1 }
         amountMinor: { type: integer }
         currency: { type: string, pattern: '^[A-Z]{3}$' }
-        entryType: { enum: [ISSUE, REVERSAL] }
+        entryType: { enum: [ISSUE, REVERSAL, FREEZE, REDEEM, REFUND] }
       description: Non-cash fulfillment facts omit amountMinor/currency; reconciliation uses quantity and status.
+    WalletFulfillmentEvent:
+      type: object
+      additionalProperties: false
+      required: [walletEntryId, skuId, skuVersion, status, entryType, operationNo, occurredAt]
+      properties:
+        walletEntryId: { type: string, maxLength: 64 }
+        skuId: { type: string, maxLength: 128 }
+        skuVersion: { type: integer, format: int64, minimum: 0 }
+        amountMinor: { type: integer, format: int64, minimum: 1 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        status: { enum: [FROZEN, USED, REVERSED] }
+        entryType: { enum: [FREEZE, REDEEM, REFUND] }
+        operationNo: { type: string, maxLength: 64 }
+        reason: { type: string, maxLength: 512 }
+        merchantRef: { type: string, maxLength: 256 }
+        occurredAt: { type: string, format: date-time }
+      description: Wallet command fact. amountMinor/currency come only from the issued WalletEntry snapshot.
     RemediationCommand:
       type: object
       additionalProperties: false
@@ -166,5 +252,90 @@ components:
         status: { enum: [PROPOSED, APPROVED, DISPATCHING, SUCCEEDED, FAILED, UNKNOWN] }
         reference: { type: string }
         errorCode: { type: string }
+    SkuTemplateChanged:
+      type: object
+      additionalProperties: false
+      required: [skuId, version, benefitType, status, validityType, usableWeekdays]
+      properties:
+        skuId: { type: string, maxLength: 128 }
+        version: { type: integer, format: int64, minimum: 0 }
+        benefitType: { $ref: '#/components/schemas/BenefitType' }
+        status: { enum: [DRAFT, PENDING_APPROVAL, ACTIVE, PAUSED, RETIRED] }
+        faceValueMinor: { type: integer, format: int64 }
+        currency: { type: string }
+        validityType: { enum: [ABSOLUTE, RELATIVE] }
+        validFrom: { type: string, format: date-time }
+        validTo: { type: string, format: date-time }
+        relativeDays: { type: integer, minimum: 1 }
+        usableWeekdays:
+          type: array
+          items: { type: integer, minimum: 1, maximum: 7 }
+        dailyQuota: { type: integer, format: int64, minimum: 1 }
+        userLimitPerDay: { type: integer, format: int64, minimum: 1 }
+        userLimitTotal: { type: integer, format: int64, minimum: 1 }
+        equivalentSkuId: { type: string, maxLength: 128 }
+    WorkflowEnvelope:
+      type: object
+      additionalProperties: false
+      required: [eventId, contractVersion, eventType, occurredAt, source, tenantId, correlationId, payload]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 128 }
+        contractVersion: { const: 1 }
+        eventType: { type: string, minLength: 1, maxLength: 64 }
+        occurredAt: { type: string, format: date-time }
+        source: { type: string, minLength: 1, maxLength: 64 }
+        tenantId: { type: string, minLength: 1, maxLength: 64 }
+        correlationId: { type: string, minLength: 1, maxLength: 256 }
+        causationId: { type: string, maxLength: 128 }
+        payload: { type: object }
+    StartProcessCommandV1:
+      type: object
+      additionalProperties: false
+      required: [processDefinitionKey, businessKey, idempotencyKey, initiator, variables]
+      properties:
+        processDefinitionKey: { const: benefitSkuGoLive }
+        businessKey: { type: string, minLength: 1, maxLength: 128 }
+        idempotencyKey: { type: string, minLength: 1, maxLength: 256 }
+        initiator: { type: string, minLength: 1, maxLength: 128 }
+        variables:
+          type: object
+          additionalProperties: true
+          description: Immutable, allowlisted SKU approval snapshot.
+    WorkflowActor:
+      type: object
+      additionalProperties: false
+      required: [subjectId, username]
+      properties:
+        subjectId: { type: string, minLength: 1, maxLength: 128 }
+        username: { type: string, minLength: 1, maxLength: 128 }
+        displayName: { type: string, maxLength: 256 }
+    WorkflowActionRequestedV1:
+      type: object
+      additionalProperties: false
+      required: [processInstanceId, taskId, taskDefinitionKey, processDefinitionKey, businessKey, actionId, action, actor, parameters]
+      properties:
+        processInstanceId: { type: string, minLength: 1, maxLength: 128 }
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        taskDefinitionKey: { const: skuGoLiveReview }
+        processDefinitionKey: { const: benefitSkuGoLive }
+        businessKey: { type: string, minLength: 1, maxLength: 128 }
+        actionId: { type: string, minLength: 1, maxLength: 128 }
+        action: { enum: [SKU_GO_LIVE_APPROVE, SKU_GO_LIVE_REJECT] }
+        actor: { $ref: '#/components/schemas/WorkflowActor' }
+        parameters: { type: object, additionalProperties: true }
+    WorkflowActionAppliedV1:
+      type: object
+      additionalProperties: false
+      required: [processInstanceId, processDefinitionKey, businessKey, actionId, status]
+      properties:
+        processInstanceId: { type: string, minLength: 1, maxLength: 128 }
+        taskId: { type: string, maxLength: 128 }
+        processDefinitionKey: { const: benefitSkuGoLive }
+        businessKey: { type: string, minLength: 1, maxLength: 128 }
+        actionId: { type: string, minLength: 1, maxLength: 128 }
+        status: { enum: [APPLIED, REJECTED_BY_BUSINESS, FAILED_RETRYABLE, FAILED_FINAL] }
+        businessVersion: { type: integer, format: int64, minimum: 0 }
+        errorCode: { type: string, maxLength: 128 }
+        errorMessage: { type: string, maxLength: 1024 }
     BenefitType:
       enum: [CASH, COUPON, SERVICE_VOUCHER, REDEMPTION_CODE, PHYSICAL]

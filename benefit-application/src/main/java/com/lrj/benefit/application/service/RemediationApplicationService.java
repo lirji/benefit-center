@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Set;
+import java.time.LocalDate;
 
 public final class RemediationApplicationService implements ExecuteRemediationUseCase {
     private final RemediationRepository remediations;
@@ -19,6 +20,8 @@ public final class RemediationApplicationService implements ExecuteRemediationUs
     private final OperationRepository operations;
     private final BenefitCatalogRepository catalog;
     private final InventoryRepository inventory;
+    private final UserLimitRepository userLimits;
+    private final UserLimitPrecheck limitPrecheck;
     private final OutboxRepository outbox;
     private final UnitOfWork unitOfWork;
     private final IdGenerator ids;
@@ -27,13 +30,16 @@ public final class RemediationApplicationService implements ExecuteRemediationUs
 
     public RemediationApplicationService(RemediationRepository remediations, AwardRepository awards,
                                          OperationRepository operations, BenefitCatalogRepository catalog,
-                                         InventoryRepository inventory, OutboxRepository outbox,
+                                         InventoryRepository inventory, UserLimitRepository userLimits,
+                                         UserLimitPrecheck limitPrecheck, OutboxRepository outbox,
                                          UnitOfWork unitOfWork, IdGenerator ids, Clock clock) {
         this.remediations = Objects.requireNonNull(remediations);
         this.awards = Objects.requireNonNull(awards);
         this.operations = Objects.requireNonNull(operations);
         this.catalog = Objects.requireNonNull(catalog);
         this.inventory = Objects.requireNonNull(inventory);
+        this.userLimits = Objects.requireNonNull(userLimits);
+        this.limitPrecheck = Objects.requireNonNull(limitPrecheck);
         this.outbox = Objects.requireNonNull(outbox);
         this.unitOfWork = Objects.requireNonNull(unitOfWork);
         this.ids = Objects.requireNonNull(ids);
@@ -102,6 +108,7 @@ public final class RemediationApplicationService implements ExecuteRemediationUs
             long remediationVersion = remediation.version();
 
             if (remediation.action() == RemediationAction.REISSUE) {
+                reserveUserLimitForReissue(tenantId, order, item);
                 reserveForReissue(tenantId, item, route, operationNo);
                 order.beginRemediation();
                 item.beginReissue(route.routeId());
@@ -193,6 +200,39 @@ public final class RemediationApplicationService implements ExecuteRemediationUs
                     Set.of(InventoryOwnerType.CENTER_QUOTA, InventoryOwnerType.CENTER_STOCK));
             throw new BenefitApplicationException(BenefitErrorCode.INVENTORY_INSUFFICIENT,
                     "inventory is insufficient for reissue");
+        }
+    }
+
+    /** 补发是新的履约尝试，但仍需重新取得用户限额占额，禁止绕过硬限额。 */
+    private void reserveUserLimitForReissue(String tenantId, AwardOrder order, AwardItem item) {
+        BenefitSku template = catalog.findSkuVersion(tenantId, item.skuId(), item.skuVersion())
+                .orElseThrow(() -> notAllowed("original SKU template snapshot is unavailable"));
+        LocalDate businessDate = LocalDate.now(clock);
+        String dayKey = businessDate.toString();
+        if (template.userLimitPerDay() != null && !limitPrecheck.mayReserve(tenantId, order.recipientRef(),
+                item.skuId(), UserLimitRepository.PeriodType.DAY, dayKey, item.quantity(),
+                template.userLimitPerDay())) {
+            throw new BenefitApplicationException(BenefitErrorCode.USER_LIMIT_EXCEEDED,
+                    "daily user limit prevents reissue");
+        }
+        if (template.userLimitTotal() != null && !limitPrecheck.mayReserve(tenantId, order.recipientRef(),
+                item.skuId(), UserLimitRepository.PeriodType.TOTAL, "ALL", item.quantity(),
+                template.userLimitTotal())) {
+            throw new BenefitApplicationException(BenefitErrorCode.USER_LIMIT_EXCEEDED,
+                    "total user limit prevents reissue");
+        }
+        if (!userLimits.reserve(tenantId, order.recipientRef(), item.skuId(), item.itemNo(), item.quantity(),
+                template.userLimitPerDay(), template.userLimitTotal(), businessDate)) {
+            throw new BenefitApplicationException(BenefitErrorCode.USER_LIMIT_EXCEEDED,
+                    "database user limit prevents reissue");
+        }
+        if (template.userLimitPerDay() != null) {
+            limitPrecheck.invalidate(tenantId, order.recipientRef(), item.skuId(),
+                    UserLimitRepository.PeriodType.DAY, dayKey);
+        }
+        if (template.userLimitTotal() != null) {
+            limitPrecheck.invalidate(tenantId, order.recipientRef(), item.skuId(),
+                    UserLimitRepository.PeriodType.TOTAL, "ALL");
         }
     }
 

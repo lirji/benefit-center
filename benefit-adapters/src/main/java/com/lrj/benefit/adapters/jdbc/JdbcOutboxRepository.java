@@ -3,6 +3,7 @@ package com.lrj.benefit.adapters.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lrj.benefit.application.port.out.OutboxRepository;
 import com.lrj.benefit.contract.MessageEnvelope;
+import com.lrj.benefit.contract.workflow.WorkflowEventEnvelopeV1;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -24,6 +25,19 @@ public final class JdbcOutboxRepository implements OutboxRepository {
     }
 
     @Override public boolean enqueue(MessageEnvelope<?> event) {
+        return enqueueSerialized(event.tenantId(), event.eventId(), event.eventType(), event.schemaVersion(),
+                event.partitionKey(), event.occurredAt(), event);
+    }
+
+    @Override
+    public boolean enqueueWorkflow(WorkflowEventEnvelopeV1<?> event, String aggregateId) {
+        return enqueueSerialized(event.tenantId(), event.eventId(), event.eventType(),
+                String.valueOf(event.contractVersion()), aggregateId, event.occurredAt(), event);
+    }
+
+    private boolean enqueueSerialized(String tenantId, String eventId, String eventType,
+                                      String schemaVersion, String aggregateId, Instant occurredAt,
+                                      Object event) {
         try {
             String payload = serialize(event);
             String normalizedHash = sha256(payload);
@@ -32,14 +46,14 @@ public final class JdbcOutboxRepository implements OutboxRepository {
                     (tenant_id,event_id,aggregate_type,aggregate_id,event_type,schema_version,payload_hash,payload,
                      status,attempt_count,next_attempt_at,published_at,created_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """, event.tenantId(), event.eventId(), aggregateType(event.eventType()), event.partitionKey(),
-                    event.eventType(), event.schemaVersion(), normalizedHash, payload,
-                    "PENDING", 0, Timestamp.from(event.occurredAt()), null, Timestamp.from(event.occurredAt()));
+                    """, tenantId, eventId, aggregateType(eventType), aggregateId,
+                    eventType, schemaVersion, normalizedHash, payload,
+                    "PENDING", 0, Timestamp.from(occurredAt), null, Timestamp.from(occurredAt));
             return true;
         } catch (DuplicateKeyException replay) {
             String existingHash = jdbc.queryForObject("""
                     SELECT payload_hash FROM bc_outbox_event WHERE tenant_id=? AND event_id=?
-                    """, String.class, event.tenantId(), event.eventId());
+                    """, String.class, tenantId, eventId);
             String payload = serialize(event);
             if (!sha256(payload).equals(existingHash)) {
                 throw new IllegalStateException("outbox event id was reused with another payload");
@@ -84,7 +98,11 @@ public final class JdbcOutboxRepository implements OutboxRepository {
     }
 
     private static String aggregateType(String eventType) {
-        return eventType.startsWith("REMEDIATION") ? "REMEDIATION" : "AWARD_ORDER";
+        if (eventType.startsWith("workflow.")) return "WORKFLOW";
+        if (eventType.startsWith("REMEDIATION")) return "REMEDIATION";
+        if (eventType.startsWith("SKU_TEMPLATE")) return "SKU_TEMPLATE";
+        if (eventType.equals("FULFILLMENT_WALLET")) return "WALLET_ENTRY";
+        return "AWARD_ORDER";
     }
 
     private static String sha256(String value) {
@@ -96,7 +114,7 @@ public final class JdbcOutboxRepository implements OutboxRepository {
         }
     }
 
-    private String serialize(MessageEnvelope<?> event) {
+    private String serialize(Object event) {
         try {
             return json.writeValueAsString(event);
         } catch (Exception serialization) {

@@ -73,6 +73,42 @@ export function RemediationStatusTag({ status }: { status: string }) {
   return <Tag color={colors[status] || 'default'}>{remediationLabels[status] || status}</Tag>
 }
 
+const templateLabels: Record<string, string> = {
+  DRAFT: '草稿',
+  PENDING_APPROVAL: '待审批',
+  ACTIVE: '已投放',
+  PAUSED: '已暂停',
+  RETIRED: '已下线',
+}
+
+const walletLabels: Record<string, string> = {
+  UNUSED: '未使用',
+  FROZEN: '已冻结',
+  USED: '已使用',
+  EXPIRED: '已过期',
+  REVERSED: '已冲正',
+}
+
+const extraColors: Record<string, string> = {
+  DRAFT: 'default',
+  PENDING_APPROVAL: 'warning',
+  ACTIVE: 'success',
+  PAUSED: 'warning',
+  RETIRED: 'default',
+  UNUSED: 'success',
+  FROZEN: 'warning',
+  USED: 'default',
+  EXPIRED: 'default',
+}
+
+export function SkuStatusTag({ status }: { status: string }) {
+  return <Tag color={extraColors[status] || colors[status] || 'default'}>{templateLabels[status] || status}</Tag>
+}
+
+export function WalletEntryStatusTag({ status }: { status: string }) {
+  return <Tag color={extraColors[status] || colors[status] || 'default'}>{walletLabels[status] || status}</Tag>
+}
+
 export function canRemediateItem(status?: string | null) {
   return status !== 'UNKNOWN' && status !== 'QUERYING'
 }

@@ -9,6 +9,7 @@ import {
   MenuUnfoldOutlined,
   ReconciliationOutlined,
   ToolOutlined,
+  WalletOutlined,
 } from '@ant-design/icons'
 import { Breadcrumb, Button, Drawer, Grid, Layout, Menu, Space } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -21,6 +22,7 @@ const navigation = [
   { key: '/remediations', label: '补发处置', icon: <ToolOutlined /> },
   { key: '/inventory', label: '库存中心', icon: <DatabaseOutlined /> },
   { key: '/catalog', label: '权益目录', icon: <AppstoreOutlined /> },
+  { key: '/wallets', label: '用户资产', icon: <WalletOutlined /> },
 ]
 
 export function AppLayout() {

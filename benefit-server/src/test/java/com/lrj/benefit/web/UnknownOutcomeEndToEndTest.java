@@ -28,7 +28,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:benefit_unknown;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
-        "spring.datasource.username=sa", "spring.datasource.password=", "benefit.security.dev-mode=true"
+        "spring.datasource.username=sa", "spring.datasource.password=", "benefit.security.dev-mode=true",
+        "benefit.cache.redis-enabled=false"
 })
 @AutoConfigureMockMvc
 @Import(UnknownOutcomeEndToEndTest.AdapterConfig.class)
@@ -39,7 +40,12 @@ class UnknownOutcomeEndToEndTest {
 
     @BeforeEach void seed() {
         jdbc.update("INSERT INTO bc_tenant_config VALUES ('T1','cell-0','ENABLED',0)");
-        jdbc.update("INSERT INTO bc_benefit_sku VALUES ('T1','COUPON-1','COUPON',NULL,NULL,'ENABLED',NULL,0)");
+        jdbc.update("""
+                INSERT INTO bc_benefit_sku
+                (tenant_id,sku_id,benefit_type,currency,face_value_minor,status,metadata_json,version,
+                 user_limit_per_day,user_limit_total)
+                VALUES ('T1','COUPON-1','COUPON',NULL,NULL,'ENABLED',NULL,0,1,1)
+                """);
         jdbc.update("""
                 INSERT INTO bc_channel_route VALUES
                 ('T1','R-CHANNEL','COUPON-1',1,'TEST_UNKNOWN','CENTER_QUOTA','R-FALLBACK','EAGER',TRUE,NULL,0),
@@ -63,6 +69,16 @@ class UnknownOutcomeEndToEndTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bc_fulfillment_operation", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT status FROM bc_fulfillment_operation", String.class)).isEqualTo("UNKNOWN");
         assertThat(jdbc.queryForObject("SELECT route_id FROM bc_award_item", String.class)).isEqualTo("R-CHANNEL");
+        AwardIntent second = new AwardIntent("1.0", "test", "REQ-U-SECOND", null, "recipient", null,
+                PartialPolicy.BEST_EFFORT, List.of(new AwardItemIntent("i-2", "COUPON-1", BenefitType.COUPON,
+                null, null, 1, Map.of())), Map.of());
+        mvc.perform(post("/openapi/v1/award-orders").header("X-Tenant-Id", "T1")
+                        .header("Idempotency-Key", "REQ-U-SECOND").contentType("application/json")
+                        .content(json.writeValueAsString(second)))
+                .andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("""
+                SELECT MAX(reserved_count) FROM bc_user_limit_counter WHERE tenant_id='T1'
+                """, Long.class)).isEqualTo(1L);
 
         jdbc.update("UPDATE bc_fulfillment_operation SET next_attempt_at=?", Timestamp.from(Instant.EPOCH));
         assertThat(fulfillment.runBatch("T1", 10, "w2").succeeded()).isEqualTo(1);
@@ -72,6 +88,9 @@ class UnknownOutcomeEndToEndTest {
                 Long.class)).isEqualTo(10L);
         assertThat(jdbc.queryForObject("SELECT reserved FROM bc_inventory_account WHERE account_id='S1'",
                 Long.class)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT MAX(issued_count) FROM bc_user_limit_counter WHERE tenant_id='T1'
+                """, Long.class)).isEqualTo(1L);
     }
 
     @Test void expiredDispatchLeaseRecoversAsQueryInsteadOfSecondIssue() throws Exception {

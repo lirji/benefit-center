@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Card, Form, Grid, Input, Space, Table } from 'antd'
@@ -15,10 +15,11 @@ export function OrdersPage() {
   const [params, setParams] = useSearchParams()
   const screens = Grid.useBreakpoint()
   const [orderNo, setOrderNo] = useState(params.get('orderNo') || '')
-  const [sourceSystem, setSourceSystem] = useState('')
-  const [sourceRequestId, setSourceRequestId] = useState('')
+  const [sourceSystem, setSourceSystem] = useState(params.get('sourceSystem') || '')
+  const [sourceRequestId, setSourceRequestId] = useState(params.get('sourceRequestId') || params.get('q') || '')
   const [lookupError, setLookupError] = useState('')
   const [activeOrder, setActiveOrder] = useState<string | null>(params.get('orderNo'))
+  const autoLookup = useRef(false)
 
   const attention = useQuery({
     queryKey: ['attention-orders'],
@@ -32,6 +33,15 @@ export function OrdersPage() {
       setOrderNo(fromUrl)
     }
   }, [params])
+
+  useEffect(() => {
+    if (autoLookup.current || params.get('orderNo')) return
+    const system = (params.get('sourceSystem') || '').trim()
+    const requestId = (params.get('sourceRequestId') || params.get('q') || '').trim()
+    if (!system || !requestId) return
+    autoLookup.current = true
+    void lookup()
+  }, [])
 
   async function lookup() {
     setLookupError('')

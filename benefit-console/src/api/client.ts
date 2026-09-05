@@ -13,6 +13,18 @@ export class ApiError extends Error {
   }
 }
 
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/** Admin writes require Idempotency-Key. Callers may set a business key first (e.g. remediations). */
+export function applyWriteIdempotencyKey(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+  const method = (config.method ?? 'get').toUpperCase()
+  if (!WRITE_METHODS.has(method)) return config
+  const existing = config.headers.get('Idempotency-Key')
+  if (existing) return config
+  config.headers.set('Idempotency-Key', crypto.randomUUID())
+  return config
+}
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_BENEFIT_API_BASE || '',
   timeout: 30_000,
@@ -20,6 +32,7 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use(async (config) => {
+  applyWriteIdempotencyKey(config)
   const token = await getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   if (AUTH_MODE === 'dev') config.headers['X-Tenant-Id'] = getDevTenantId()

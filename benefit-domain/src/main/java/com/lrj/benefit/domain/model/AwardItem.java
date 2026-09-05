@@ -8,6 +8,7 @@ public final class AwardItem {
     private final String itemNo;
     private final String clientItemId;
     private final String skuId;
+    private final long skuVersion;
     private final BenefitType benefitType;
     private final long quantity;
     private final Long amountMinor;
@@ -15,19 +16,31 @@ public final class AwardItem {
     private AwardItemStatus status;
     private String routeId;
     private String failureCode;
+    private String walletEntryId;
     private long version;
 
     public AwardItem(String itemNo, String clientItemId, String skuId, BenefitType benefitType,
                      long quantity, AwardItemStatus status, long version) {
-        this(itemNo, clientItemId, skuId, benefitType, quantity, null, null, status, null, null, version);
+        this(itemNo, clientItemId, skuId, 0, benefitType, quantity, null, null,
+                status, null, null, null, version);
     }
 
     public AwardItem(String itemNo, String clientItemId, String skuId, BenefitType benefitType,
                      long quantity, Long amountMinor, String currency, AwardItemStatus status,
                      String routeId, String failureCode, long version) {
+        this(itemNo, clientItemId, skuId, 0, benefitType, quantity, amountMinor, currency,
+                status, routeId, failureCode, null, version);
+    }
+
+    public AwardItem(String itemNo, String clientItemId, String skuId, long skuVersion,
+                     BenefitType benefitType, long quantity, Long amountMinor, String currency,
+                     AwardItemStatus status, String routeId, String failureCode,
+                     String walletEntryId, long version) {
         this.itemNo = Objects.requireNonNull(itemNo, "itemNo");
         this.clientItemId = Objects.requireNonNull(clientItemId, "clientItemId");
         this.skuId = Objects.requireNonNull(skuId, "skuId");
+        if (skuVersion < 0) throw new IllegalArgumentException("skuVersion must not be negative");
+        this.skuVersion = skuVersion;
         this.benefitType = Objects.requireNonNull(benefitType, "benefitType");
         if (quantity <= 0) throw new IllegalArgumentException("quantity must be positive");
         this.quantity = quantity;
@@ -42,6 +55,7 @@ public final class AwardItem {
         this.status = Objects.requireNonNull(status, "status");
         this.routeId = routeId;
         this.failureCode = failureCode;
+        this.walletEntryId = walletEntryId;
         this.version = version;
     }
 
@@ -117,6 +131,18 @@ public final class AwardItem {
     public void reverseSucceeded() { transition(AwardItemStatus.REVERSING, AwardItemStatus.REVERSED); }
     public void reversalFailed() { transition(AwardItemStatus.REVERSING, AwardItemStatus.REVERSAL_FAILED); }
     public void reversalUnknown() { transition(AwardItemStatus.REVERSING, AwardItemStatus.REVERSAL_UNKNOWN); }
+
+    /** 入账成功后回填资产标识，供订单详情跳转券包。 */
+    public void bindWalletEntry(String entryId) {
+        if (status != AwardItemStatus.SUCCEEDED) {
+            throw new IllegalStateException("wallet entry can be bound only after issuance succeeds");
+        }
+        if (walletEntryId != null && !walletEntryId.equals(entryId)) {
+            throw new IllegalStateException("award item is already bound to another wallet entry");
+        }
+        walletEntryId = Objects.requireNonNull(entryId, "entryId");
+        version++;
+    }
     public void beginReversalQuery() {
         if (status != AwardItemStatus.REVERSAL_UNKNOWN && status != AwardItemStatus.REVERSING) {
             illegal(AwardItemStatus.REVERSING);
@@ -137,6 +163,7 @@ public final class AwardItem {
     public String itemNo() { return itemNo; }
     public String clientItemId() { return clientItemId; }
     public String skuId() { return skuId; }
+    public long skuVersion() { return skuVersion; }
     public BenefitType benefitType() { return benefitType; }
     public long quantity() { return quantity; }
     public Long amountMinor() { return amountMinor; }
@@ -144,5 +171,6 @@ public final class AwardItem {
     public AwardItemStatus status() { return status; }
     public String routeId() { return routeId; }
     public String failureCode() { return failureCode; }
+    public String walletEntryId() { return walletEntryId; }
     public long version() { return version; }
 }

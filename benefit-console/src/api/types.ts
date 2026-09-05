@@ -19,7 +19,13 @@ export type Overview = {
   pendingRemediations: number
   skuCount: number
   enabledRoutes: number
+  activeTemplateCount?: number
+  walletIssued24h?: number
 }
+
+export type SkuTemplateStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'ACTIVE' | 'PAUSED' | 'RETIRED'
+export type ValidityType = 'ABSOLUTE' | 'RELATIVE'
+export type WalletEntryStatus = 'UNUSED' | 'FROZEN' | 'USED' | 'EXPIRED' | 'REVERSED'
 
 export type TenantView = {
   tenantId: string
@@ -33,7 +39,60 @@ export type SkuView = {
   benefitType: string
   faceValueMinor: number | null
   currency: string | null
+  status: SkuTemplateStatus
   enabled: boolean
+  validityType: ValidityType
+  validFrom: string | null
+  validTo: string | null
+  relativeDays: number | null
+  usableWeekdays: number[]
+  dailyQuota: number | null
+  userLimitPerDay: number | null
+  userLimitTotal: number | null
+  equivalentSkuId: string | null
+  approvalProcessDefinitionKey?: string | null
+  approvalBusinessKey?: string | null
+  version: number
+}
+
+export type SkuSubmitAcceptance = {
+  skuId: string
+  status: 'PENDING_APPROVAL'
+  version: number
+}
+
+export type WalletView = {
+  subjectRef: string
+  totalEntries: number
+  unusedEntries: number
+  cashBalances: { currency: string; balanceMinor: number }[]
+}
+
+export type WalletEntryView = {
+  entryId: string
+  subjectRef: string
+  skuId: string
+  skuVersion: number
+  awardOrderNo: string
+  itemNo: string
+  assetType: string
+  status: WalletEntryStatus
+  version: number
+  expiresAt: string | null
+  faceValueMinor: number | null
+  currency: string | null
+  createdAt: string
+}
+
+export type WalletEntryCommand = {
+  reason?: string
+  merchantRef?: string
+  expectedVersion?: number
+}
+
+export type WalletEntryCommandAcceptance = {
+  entryId: string
+  status: WalletEntryStatus
   version: number
 }
 
@@ -83,6 +142,8 @@ export type AwardItem = {
   failureCode: string | null
   latestOperationNo: string | null
   latestOperationStatus: string | null
+  skuVersion?: number
+  walletEntryId?: string | null
 }
 
 export type AwardOrder = {
@@ -90,6 +151,7 @@ export type AwardOrder = {
   sourceSystem: string
   sourceRequestId: string
   sourceBusinessNo: string | null
+  recipientRef: string
   status: string
   homeCell: string
   items: AwardItem[]

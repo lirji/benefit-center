@@ -86,7 +86,7 @@ export function DashboardPage() {
           <MetricCard
             label="可用路由"
             value={formatCount(metrics?.enabledRoutes ?? 0)}
-            hint={`${formatCount(metrics?.skuCount ?? 0)} 个 SKU`}
+            hint={`${formatCount(metrics?.activeTemplateCount ?? metrics?.skuCount ?? 0)} 个已投放模板`}
             icon={<AppstoreOutlined />}
             tone="success"
             actionLabel="权益目录"

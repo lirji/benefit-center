@@ -10,6 +10,7 @@ const OrdersPage = lazy(() => import('./pages/OrdersPage').then((m) => ({ defaul
 const RemediationsPage = lazy(() => import('./pages/RemediationsPage').then((m) => ({ default: m.RemediationsPage })))
 const InventoryPage = lazy(() => import('./pages/InventoryPage').then((m) => ({ default: m.InventoryPage })))
 const CatalogPage = lazy(() => import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })))
+const WalletsPage = lazy(() => import('./pages/WalletsPage').then((m) => ({ default: m.WalletsPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
 const CallbackPage = lazy(() => import('./pages/CallbackPage').then((m) => ({ default: m.CallbackPage })))
 const ForbiddenPage = lazy(() => import('./pages/ForbiddenPage').then((m) => ({ default: m.ForbiddenPage })))
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
               { path: 'remediations', element: lazyRoute(<RemediationsPage />) },
               { path: 'inventory', element: lazyRoute(<InventoryPage />) },
               { path: 'catalog', element: lazyRoute(<CatalogPage />) },
+              { path: 'wallets', element: lazyRoute(<WalletsPage />) },
             ],
           },
         ],

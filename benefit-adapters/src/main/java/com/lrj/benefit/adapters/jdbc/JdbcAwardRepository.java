@@ -41,12 +41,13 @@ public final class JdbcAwardRepository implements AwardRepository {
     private void insertItem(AwardOrder order, AwardItem item, Instant now) {
         jdbc.update("""
                 INSERT INTO bc_award_item
-                (tenant_id,item_no,order_no,client_item_id,sku_id,benefit_type,amount_minor,currency,
-                 quantity,status,route_id,failure_code,retry_at,version,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                (tenant_id,item_no,order_no,client_item_id,sku_id,sku_version,benefit_type,amount_minor,currency,
+                 quantity,status,route_id,failure_code,wallet_entry_id,retry_at,version,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, order.tenantId(), item.itemNo(), order.orderNo(), item.clientItemId(), item.skuId(),
-                item.benefitType().name(), item.amountMinor(), item.currency(), item.quantity(), item.status().name(),
-                item.routeId(), item.failureCode(), null, item.version(), ts(now), ts(now));
+                item.skuVersion(), item.benefitType().name(), item.amountMinor(), item.currency(), item.quantity(),
+                item.status().name(), item.routeId(), item.failureCode(), item.walletEntryId(), null,
+                item.version(), ts(now), ts(now));
     }
 
     @Override public Optional<AwardOrder> findByOrderNo(String tenantId, String orderNo) {
@@ -73,8 +74,8 @@ public final class JdbcAwardRepository implements AwardRepository {
         if (orders.isEmpty()) return Optional.empty();
         OrderRow row = orders.getFirst();
         List<AwardItem> items = jdbc.query("""
-                SELECT item_no,client_item_id,sku_id,benefit_type,quantity,amount_minor,currency,status,
-                       route_id,failure_code,version
+                SELECT item_no,client_item_id,sku_id,sku_version,benefit_type,quantity,amount_minor,currency,status,
+                       route_id,failure_code,wallet_entry_id,version
                 FROM bc_award_item WHERE tenant_id=? AND order_no=? ORDER BY item_no
                 """, this::mapItem, row.tenantId(), row.orderNo());
         return Optional.of(new AwardOrder(row.tenantId(), row.orderNo(), row.sourceSystem(), row.sourceRequestId(),
@@ -92,10 +93,10 @@ public final class JdbcAwardRepository implements AwardRepository {
         if (updated != 1) return false;
         for (AwardItem item : order.items()) {
             jdbc.update("""
-                    UPDATE bc_award_item SET status=?,route_id=?,failure_code=?,version=?,updated_at=?
+                    UPDATE bc_award_item SET status=?,route_id=?,failure_code=?,wallet_entry_id=?,version=?,updated_at=?
                     WHERE tenant_id=? AND item_no=?
-                    """, item.status().name(), item.routeId(), item.failureCode(), item.version(), ts(Instant.now()),
-                    order.tenantId(), item.itemNo());
+                    """, item.status().name(), item.routeId(), item.failureCode(), item.walletEntryId(),
+                    item.version(), ts(Instant.now()), order.tenantId(), item.itemNo());
         }
         return true;
     }
@@ -110,9 +111,10 @@ public final class JdbcAwardRepository implements AwardRepository {
     private AwardItem mapItem(ResultSet rs, int row) throws SQLException {
         Long amount = (Long) rs.getObject("amount_minor");
         return new AwardItem(rs.getString("item_no"), rs.getString("client_item_id"), rs.getString("sku_id"),
-                BenefitType.valueOf(rs.getString("benefit_type")), rs.getLong("quantity"), amount,
+                rs.getLong("sku_version"), BenefitType.valueOf(rs.getString("benefit_type")), rs.getLong("quantity"), amount,
                 rs.getString("currency"), AwardItemStatus.valueOf(rs.getString("status")),
-                rs.getString("route_id"), rs.getString("failure_code"), rs.getLong("version"));
+                rs.getString("route_id"), rs.getString("failure_code"), rs.getString("wallet_entry_id"),
+                rs.getLong("version"));
     }
 
     private static Timestamp ts(Instant value) { return Timestamp.from(value); }

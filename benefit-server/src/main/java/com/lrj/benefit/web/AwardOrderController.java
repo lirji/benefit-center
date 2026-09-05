@@ -63,11 +63,11 @@ public class AwardOrderController {
     }
 
     public record AwardOrderResponse(String orderNo, String sourceSystem, String sourceRequestId,
-                                     String sourceBusinessNo, String status, String homeCell,
+                                     String sourceBusinessNo, String recipientRef, String status, String homeCell,
                                      List<AwardItemResponse> items) {
         static AwardOrderResponse from(AwardOrder order, OperationRepository operations) {
             return new AwardOrderResponse(order.orderNo(), order.sourceSystem(), order.sourceRequestId(),
-                    order.sourceBusinessNo(), order.status().name(), order.homeCell(),
+                    order.sourceBusinessNo(), order.recipientRef(), order.status().name(), order.homeCell(),
                     order.items().stream().map(item -> AwardItemResponse.from(order.tenantId(), item, operations)).toList());
         }
     }
@@ -75,14 +75,14 @@ public class AwardOrderController {
     public record AwardItemResponse(String itemNo, String clientItemId, String skuId, String benefitType,
                                     long quantity, Long amountMinor, String currency, String status,
                                     String routeId, String failureCode, String latestOperationNo,
-                                    String latestOperationStatus) {
+                                    String latestOperationStatus, long skuVersion, String walletEntryId) {
         static AwardItemResponse from(String tenantId, AwardItem item, OperationRepository operations) {
             FulfillmentOperation latest = operations.findByItem(tenantId, item.itemNo()).stream().findFirst().orElse(null);
             return new AwardItemResponse(item.itemNo(), item.clientItemId(), item.skuId(),
                     item.benefitType().name(), item.quantity(), item.amountMinor(), item.currency(),
                     item.status().name(), item.routeId(), item.failureCode(),
                     latest == null ? null : latest.operationNo(),
-                    latest == null ? null : latest.status().name());
+                    latest == null ? null : latest.status().name(), item.skuVersion(), item.walletEntryId());
         }
     }
 }
