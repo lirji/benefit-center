@@ -37,9 +37,25 @@
 - 仅明确 `FAILED_FINAL` 且有审批引用时允许 REISSUE；UNKNOWN 先 query。
 - remediation 使用稳定 externalCommandId；重放不同 payload 会返回幂等冲突。
 
+### SKU 审批停在 PENDING_APPROVAL / PENDING_BUSINESS
+
+- 先按 `tenant + skuId + skuVersion` 查模板、start outbox、workflow 实例和 actionId，不要直接把 SKU 改成 ACTIVE。
+- start outbox 积压时检查 `BENEFIT_OUTBOX_ENABLED`、三个 workflow topic、Kafka ACL 和 `benefit-center` HMAC key。action 收不到时检查 `WORKFLOW_KAFKA_ENABLED`、consumer group `benefit-wf-sku-golive`，以及是否配置了 `workflow-server` 的验签 key。
+- workflow 侧办理返回 202 只表示决定已受理。权益中台 CAS 成功并发出 `workflow.action.applied.v1` 后，workflow 才能收到 `benefitSkuGoLiveApplied` 并结束流程。
+- 若业务返回 `SKU_APPROVAL_STATE_CHANGED` 或版本冲突，保留原流程和 inbox 审计；重新提交必须基于当前 DRAFT 新版本生成新的幂等周期，禁止复用旧 actionId 强行覆盖。
+
+### WalletEntry 核销或退款冲突
+
+- 先用 `GET /admin/v1/wallets/{subjectRef}/entries` 核对 entryId、status、version 与发放时 `skuVersion`；订单详情只用于关联，不是资产状态真相源。
+- 同一 `Idempotency-Key` 重放应返回首次 202 结果，即使资产后来继续迁移；同键异载荷必须保持 409。不要因为返回旧版本就改写 `bc_command_idempotency.result_payload`。
+- `WALLET_VERSION_CONFLICT` 先判断是否为并发命令；`WALLET_ILLEGAL_TRANSITION` / `WALLET_ALREADY_USED` 表示当前状态不允许该动作。当前只允许 `UNUSED→FROZEN→USED`、`UNUSED→USED`、`USED→REVERSED`，没有 unfreeze。
+- 现金 redeem/refund 对账以 `bc_wallet_balance_ledger` 的 `REDEEM` / `REFUND` 和履约 outbox 为准；禁止调用 remediation 的 `REVERSAL` 来替代钱包退款，也禁止按当前 SKU 面额重算。
+- 钱包 outbox 的 `FULFILLMENT_WALLET` 与发奖履约事实结构不同。现有 recon `BenefitOdsConsumer` 尚不兼容该 payload；启用 relay 前应隔离事件路由或先升级 consumer，并监控 retry/DLT，不能把“已发布”视为“已纳入对账”。
+
 ## 灰度与回滚
 
 - 回滚只切新 sourceRequest：Drools `CENTER → LEGACY` 后，benefit 已接受订单仍由 worker 收敛。
 - 单渠道故障优先将 route disabled；不要全局停止 outbox。
 - 数据只前滚修复，不 drop ledger/inbox/outbox，不重写历史 operation。
 - 任一双发、负库存、跨租户或账不守恒立即停止扩档。
+- workflow 回切先停 `WORKFLOW_KAFKA_ENABLED`，再停 `BENEFIT_OUTBOX_ENABLED`；这会同时影响其他 outbox，执行前必须确认普通履约事实允许短时积压。在途 PENDING 审批保留并人工收敛，不批量改状态。

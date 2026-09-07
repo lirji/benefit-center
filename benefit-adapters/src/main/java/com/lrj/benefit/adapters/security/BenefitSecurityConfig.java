@@ -67,8 +67,9 @@ public final class BenefitSecurityConfig {
         }
 
         @Bean JwtTenantFilter jwtTenantFilter(
-                @Value("${benefit.security.audience-tenants:}") String mappings) {
-            return new JwtTenantFilter(false, mappings);
+                @Value("${benefit.security.audience-tenants:}") String mappings,
+                @Value("${benefit.security.delegated-tenant-subjects:}") String delegatedTenantSubjects) {
+            return new JwtTenantFilter(false, mappings, delegatedTenantSubjects);
         }
 
         @Bean SecurityFilterChain secureBenefitSecurity(HttpSecurity http, JwtTenantFilter tenantFilter,
@@ -81,6 +82,8 @@ public final class BenefitSecurityConfig {
                             .requestMatchers(HttpMethod.OPTIONS, "/healthz").permitAll()
                             .requestMatchers(HttpMethod.POST, "/openapi/v1/award-orders").hasAuthority("SCOPE_benefit.award.write")
                             .requestMatchers(HttpMethod.GET, "/openapi/v1/award-orders/**").hasAuthority("SCOPE_benefit.award.read")
+                            .requestMatchers(HttpMethod.GET, "/internal/v1/catalog/skus")
+                            .hasAuthority("SCOPE_benefit.catalog.read")
                             .requestMatchers(HttpMethod.POST, "/openapi/v1/wallet-entries/**").hasAuthority("SCOPE_benefit.admin")
                             .requestMatchers("/internal/v1/remediations/**").hasAuthority("SCOPE_benefit.remediate")
                             .requestMatchers("/admin/v1/**").hasAuthority("SCOPE_benefit.admin")

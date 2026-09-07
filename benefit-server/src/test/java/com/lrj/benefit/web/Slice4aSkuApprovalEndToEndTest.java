@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "benefit.outbox.enabled=false",
         "benefit.cache.redis-enabled=false",
         "workflow.kafka.enabled=true",
+        "workflow.kafka.configuration-guard-enabled=false",
         "spring.kafka.listener.auto-startup=false"
 })
 @AutoConfigureMockMvc
@@ -135,6 +136,107 @@ class Slice4aSkuApprovalEndToEndTest {
         submit(tenant, "SKU-4A-VERSION", "missing-version", "{}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INTENT"));
+    }
+
+    @Test
+    void pendingApprovalCanRetryStartWithoutCreatingAnotherWorkflowCycle() throws Exception {
+        String tenant = "T-4A-RETRY";
+        String skuId = "SKU-4A-RETRY";
+        seedSku(tenant, skuId, "PENDING_APPROVAL", 1);
+
+        mvc.perform(post("/admin/v1/skus/{skuId}:retry-approval", skuId)
+                        .header("X-Tenant-Id", tenant)
+                        .header("Idempotency-Key", "retry-command-1")
+                        .header("X-Operator", "slice4a-tester")
+                        .contentType("application/json")
+                        .content("{\"expectedVersion\":1}"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("PENDING_APPROVAL"))
+                .andExpect(jsonPath("$.version").value(1));
+
+        String payload = jdbc.queryForObject("""
+                SELECT payload FROM bc_outbox_event
+                WHERE tenant_id=? AND event_type='workflow.command.start.v1'
+                """, String.class, tenant);
+        assertThat(json.readTree(payload).path("payload").path("idempotencyKey").asText())
+                .isEqualTo(tenant + '|' + skuId + "|0");
+
+        // HTTP 幂等重放不能再插入第二条 outbox；workflow 幂等键则防止不同重提命令重复起实例。
+        mvc.perform(post("/admin/v1/skus/{skuId}:retry-approval", skuId)
+                        .header("X-Tenant-Id", tenant)
+                        .header("Idempotency-Key", "retry-command-1")
+                        .header("X-Operator", "slice4a-tester")
+                        .contentType("application/json")
+                        .content("{\"expectedVersion\":1}"))
+                .andExpect(status().isAccepted());
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bc_outbox_event
+                WHERE tenant_id=? AND event_type='workflow.command.start.v1'
+                """, Integer.class, tenant)).isEqualTo(1);
+    }
+
+    @Test
+    void retryRequiresPendingApprovalAndCurrentVersion() throws Exception {
+        String tenant = "T-4A-RETRY-CODES";
+        seedDraft(tenant, "SKU-4A-RETRY-DRAFT", 0);
+        seedSku(tenant, "SKU-4A-RETRY-VERSION", "PENDING_APPROVAL", 2);
+
+        mvc.perform(post("/admin/v1/skus/{skuId}:retry-approval", "SKU-4A-RETRY-DRAFT")
+                        .header("X-Tenant-Id", tenant).header("Idempotency-Key", "retry-draft")
+                        .contentType("application/json").content("{\"expectedVersion\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SKU_APPROVAL_NOT_PENDING"));
+        mvc.perform(post("/admin/v1/skus/{skuId}:retry-approval", "SKU-4A-RETRY-VERSION")
+                        .header("X-Tenant-Id", tenant).header("Idempotency-Key", "retry-version")
+                        .contentType("application/json").content("{\"expectedVersion\":1}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SKU_VERSION_CONFLICT"));
+    }
+
+    @Test
+    void pendingApprovalCanWithdrawAndThenSubmitAgain() throws Exception {
+        String tenant = "T-4A-WITHDRAW";
+        String skuId = "SKU-4A-WITHDRAW";
+        seedSku(tenant, skuId, "PENDING_APPROVAL", 1);
+
+        withdraw(tenant, skuId, "withdraw-1", 1)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.version").value(2));
+        assertThat(jdbc.queryForMap("""
+                SELECT status,version FROM bc_benefit_sku WHERE tenant_id=? AND sku_id=?
+                """, tenant, skuId)).containsEntry("status", "DRAFT").containsEntry("version", 2L);
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bc_sku_template_version
+                WHERE tenant_id=? AND sku_id=? AND version=2 AND status='DRAFT'
+                """, Integer.class, tenant, skuId)).isEqualTo(1);
+
+        // 退回后使用新版本再次提交，才创建下一审批周期；withdraw 本身不产生 start。
+        submit(tenant, skuId, "submit-after-withdraw", "{\"expectedVersion\":2}")
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.version").value(3));
+        assertThat(jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bc_outbox_event
+                WHERE tenant_id=? AND event_type='workflow.command.start.v1'
+                """, Integer.class, tenant)).isEqualTo(1);
+    }
+
+    @Test
+    void withdrawRequiresPendingApprovalAndCurrentVersion() throws Exception {
+        String tenant = "T-4A-WITHDRAW-CODES";
+        seedDraft(tenant, "SKU-4A-WITHDRAW-DRAFT", 0);
+        seedSku(tenant, "SKU-4A-WITHDRAW-ACTIVE", "ACTIVE", 1);
+        seedSku(tenant, "SKU-4A-WITHDRAW-VERSION", "PENDING_APPROVAL", 2);
+
+        withdraw(tenant, "SKU-4A-WITHDRAW-DRAFT", "withdraw-draft", 1)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SKU_APPROVAL_NOT_PENDING"));
+        withdraw(tenant, "SKU-4A-WITHDRAW-ACTIVE", "withdraw-active", 1)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SKU_APPROVAL_NOT_PENDING"));
+        withdraw(tenant, "SKU-4A-WITHDRAW-VERSION", "withdraw-version", 1)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SKU_VERSION_CONFLICT"));
     }
 
     @Test
@@ -328,6 +430,15 @@ class Slice4aSkuApprovalEndToEndTest {
         assertThat(jdbc.queryForObject("""
                 SELECT status FROM bc_benefit_sku WHERE tenant_id=? AND sku_id=?
                 """, String.class, tenant, skuId)).isEqualTo(status);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions withdraw(
+            String tenant, String skuId, String idempotencyKey, long expectedVersion) throws Exception {
+        return mvc.perform(post("/admin/v1/skus/{skuId}:withdraw-approval", skuId)
+                .header("X-Tenant-Id", tenant)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .content("{\"expectedVersion\":" + expectedVersion + '}'));
     }
 
     private String workflowActionEnvelope(String tenant, String eventId, String actionId,

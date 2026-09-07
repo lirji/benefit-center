@@ -58,3 +58,13 @@ cd ../dev-infra && ./bin/dev-infra status
 本次按空库初始化：原项目 Compose 未运行，预期的 `deploy_benefit_mysql` 卷不存在；原 Redpanda 也未配置持久化卷，因此没有历史数据库记录或 Kafka 消息可导入。
 
 回滚时可以恢复旧版 Compose 配置并重新创建项目私有服务。现有 Docker 卷不会由初始化或启动脚本删除；不要使用 `docker compose down -v` 或删除 `dev-infra` 数据卷。
+
+## 统一链路追踪
+
+```bash
+cd ../dev-infra && make marketing-obs
+cd ../benefit-center
+bash deploy/compose.sh -f docker-compose.yml -f compose.observability.yml up -d --build
+```
+
+观测 overlay 为 `server` 注入共享 OpenTelemetry Java Agent，服务名固定为 `benefit-center`，OTLP HTTP 发送到共享 Collector。Grafana 地址为 `http://127.0.0.1:3001`；在 Tempo 中按服务名、HTTP route、错误状态或 traceId 查询。默认本地全采样，可在 `deploy/.env` 改为 `OTEL_TRACES_SAMPLER=traceidratio`、`OTEL_TRACES_SAMPLER_ARG=0.1`，完全停用则设置 `OTEL_SDK_DISABLED=true`。AwardIntent/outbox 等延迟投递会开始新 trace，业务 `traceId/sourceRequestId` 应同时用于日志和审计检索。完整规则见同级 `dev-infra/docs/observability.md`。

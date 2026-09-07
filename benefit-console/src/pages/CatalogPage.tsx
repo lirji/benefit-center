@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App, Button, Card, Drawer, Form, Grid, Input, InputNumber, Select, Space, Switch, Table, Tabs } from 'antd'
-import { getCurrentTenant, listRoutes, listSkus, saveRoute, saveSku, saveTenant, submitSkuApproval } from '../api/benefit'
+import { getCurrentTenant, getSkuApprovalRuntime, listRoutes, listSkus, retrySkuApproval, saveRoute, saveSku, saveTenant, submitSkuApproval, withdrawSkuApproval } from '../api/benefit'
 import type { RouteView, SkuView } from '../api/types'
 import { SkuDrawer } from '../components/catalog/SkuDrawer'
 import { EmptyState, ErrorState, PageSkeleton } from '../components/common/AsyncState'
@@ -41,6 +41,12 @@ export function CatalogPage() {
   })
   const skus = useQuery({ queryKey: ['skus'], queryFn: () => listSkus(50) })
   const routes = useQuery({ queryKey: ['routes'], queryFn: () => listRoutes(undefined, 50) })
+  const approvalRuntime = useQuery({
+    queryKey: ['sku-approval-runtime', editingSku?.skuId],
+    queryFn: () => getSkuApprovalRuntime(editingSku!.skuId),
+    enabled: skuOpen && editingSku?.status === 'PENDING_APPROVAL',
+    retry: false,
+  })
 
   const saveTenantMut = useMutation({
     mutationFn: (body: { tenantId: string; homeCell: string; enabled: boolean; expectedVersion?: number }) =>
@@ -53,10 +59,31 @@ export function CatalogPage() {
   })
   const saveSkuMut = useMutation({
     mutationFn: (body: Record<string, unknown> & { skuId: string }) => saveSku(body.skuId, body),
-    onSuccess: async () => {
+    onSuccess: async (_data, body) => {
       message.success('模板已保存')
-      setSkuOpen(false)
       await queryClient.invalidateQueries({ queryKey: ['skus'] })
+      const list = await queryClient.fetchQuery({ queryKey: ['skus'], queryFn: () => listSkus(50) })
+      const saved = list.find((item) => item.skuId === body.skuId)
+      setEditingSku(
+        saved ?? {
+          skuId: body.skuId,
+          benefitType: String(body.benefitType ?? 'COUPON'),
+          faceValueMinor: typeof body.faceValueMinor === 'number' ? body.faceValueMinor : null,
+          currency: typeof body.currency === 'string' ? body.currency : null,
+          status: 'DRAFT',
+          enabled: false,
+          validityType: body.validityType === 'ABSOLUTE' ? 'ABSOLUTE' : 'RELATIVE',
+          validFrom: typeof body.validFrom === 'string' ? body.validFrom : null,
+          validTo: typeof body.validTo === 'string' ? body.validTo : null,
+          relativeDays: typeof body.relativeDays === 'number' ? body.relativeDays : null,
+          usableWeekdays: Array.isArray(body.usableWeekdays) ? body.usableWeekdays.map(Number) : [1, 2, 3, 4, 5, 6, 7],
+          dailyQuota: typeof body.dailyQuota === 'number' ? body.dailyQuota : null,
+          userLimitPerDay: typeof body.userLimitPerDay === 'number' ? body.userLimitPerDay : null,
+          userLimitTotal: typeof body.userLimitTotal === 'number' ? body.userLimitTotal : null,
+          equivalentSkuId: null,
+          version: 0,
+        },
+      )
     },
     onError: (error) => message.error(errorMessage(error)),
   })
@@ -75,6 +102,39 @@ export function CatalogPage() {
         approvalBusinessKey: acceptance.skuId,
       }
       setEditingSku(next)
+      await queryClient.invalidateQueries({ queryKey: ['skus'] })
+    },
+    onError: (error) => message.error(errorMessage(error)),
+  })
+  const retrySkuMut = useMutation({
+    mutationFn: () => {
+      if (!editingSku) throw new Error('未选择待恢复的 SKU')
+      return retrySkuApproval(editingSku.skuId, { expectedVersion: editingSku.version })
+    },
+    onSuccess: async (acceptance) => {
+      message.info('审批重发已受理')
+      setEditingSku((current) => current ? { ...current, status: acceptance.status, version: acceptance.version } : current)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['skus'] }),
+        queryClient.invalidateQueries({ queryKey: ['sku-approval-runtime', acceptance.skuId] }),
+      ])
+    },
+    onError: (error) => message.error(errorMessage(error)),
+  })
+  const withdrawSkuMut = useMutation({
+    mutationFn: () => {
+      if (!editingSku) throw new Error('未选择待恢复的 SKU')
+      return withdrawSkuApproval(editingSku.skuId, { expectedVersion: editingSku.version })
+    },
+    onSuccess: async (acceptance) => {
+      message.success('已退回草稿')
+      setEditingSku((current) => current ? {
+        ...current,
+        status: 'DRAFT',
+        version: acceptance.version,
+        approvalProcessDefinitionKey: null,
+        approvalBusinessKey: null,
+      } : current)
       await queryClient.invalidateQueries({ queryKey: ['skus'] })
     },
     onError: (error) => message.error(errorMessage(error)),
@@ -241,6 +301,12 @@ export function CatalogPage() {
         onClose={() => setSkuOpen(false)}
         onSave={(body) => saveSkuMut.mutate(body)}
         onSubmitApproval={() => submitSkuMut.mutate()}
+        approvalRuntime={approvalRuntime.data}
+        runtimeLoading={approvalRuntime.isLoading}
+        recovering={retrySkuMut.isPending || withdrawSkuMut.isPending}
+        onRetryApproval={() => retrySkuMut.mutate()}
+        onWithdrawApproval={() => withdrawSkuMut.mutate()}
+        tenantId={tenant.data?.tenantId}
       />
 
       <Drawer title={editingRoute ? '编辑路由' : '新建路由'} width={screens.md ? 480 : '100%'} open={routeOpen} onClose={() => setRouteOpen(false)}>

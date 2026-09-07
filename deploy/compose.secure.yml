@@ -14,7 +14,11 @@ services:
       BENEFIT_SECURITY_DEV_MODE: "false"
       BENEFIT_JWK_SET_URI: ${BENEFIT_JWK_SET_URI:-http://host.docker.internal:8000/.well-known/jwks}
       BENEFIT_AUDIENCE_TENANTS: ${BENEFIT_AUDIENCE_TENANTS:-ragshared0client00000001-org-benefit-center=benefit-center}
+      BENEFIT_DELEGATED_TENANT_SUBJECTS: ${BENEFIT_DELEGATED_TENANT_SUBJECTS:-}
       BENEFIT_WORKER_TENANTS: ${BENEFIT_WORKER_TENANTS:-benefit-center}
+      # 本地 secure 主路径必须能消费人工决定并回 ACK；缺双向 HMAC 时应用启动门禁会明确失败。
+      WORKFLOW_KAFKA_ENABLED: ${WORKFLOW_KAFKA_ENABLED:-true}
+      WORKFLOW_KAFKA_SOURCE_SIGNING_KEYS: ${WORKFLOW_KAFKA_SOURCE_SIGNING_KEYS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -27,3 +31,4 @@ services:
         VITE_CASDOOR_ORGANIZATION: ${VITE_CASDOOR_ORGANIZATION:-benefit-center}
         VITE_CASDOOR_APP_NAME: ${VITE_CASDOOR_APP_NAME:-rag-shared}
         VITE_CASDOOR_SCOPE: ${VITE_CASDOOR_SCOPE:-openid profile offline_access}
+        VITE_WORKFLOW_CONSOLE_ORIGIN: ${VITE_WORKFLOW_CONSOLE_ORIGIN:-}

@@ -8,9 +8,12 @@ describe('workflowHref', () => {
 
   it('returns null when origin is empty', async () => {
     vi.stubEnv('VITE_WORKFLOW_CONSOLE_ORIGIN', '')
-    const { workflowProcessHref, workflowTasksHref } = await import('./workflowHref')
+    const { workflowProcessHref, workflowTasksHref, workflowTasksFallbackUrl } = await import('./workflowHref')
     expect(workflowProcessHref('benefitSkuGoLive', 'SKU-1')).toBeNull()
     expect(workflowTasksHref('benefitSkuGoLive', 'SKU-1')).toBeNull()
+    expect(workflowTasksFallbackUrl('1001')).toBe(
+      'http://localhost:8302/tasks?definitionKey=benefitSkuGoLive&businessKey=1001',
+    )
   })
 
   it('builds process and task links when origin is set', async () => {

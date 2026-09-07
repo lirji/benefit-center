@@ -227,6 +227,86 @@ public final class JdbcCatalogAdminService implements CatalogAdminUseCase, Workf
     }
 
     /**
+     * 对卡在 PENDING_APPROVAL 的 SKU 重发同一审批周期。新的 eventId 负责消息重投，原
+     * tenant|skuId|提交前版本 幂等键负责保证 workflow 不会创建第二个实例。
+     */
+    @Override
+    public SkuSubmitAcceptance retrySkuApproval(String tenantId, String skuId, long expectedVersion,
+                                                String initiator) {
+        require("tenantId", tenantId);
+        require("skuId", skuId);
+        require("initiator", initiator);
+        if (expectedVersion < 1) throw new IllegalArgumentException("expectedVersion must be positive");
+        return unitOfWork.required(() -> {
+            List<ApprovalState> locked = jdbc.query("""
+                    SELECT status,version FROM bc_benefit_sku
+                    WHERE tenant_id=? AND sku_id=? FOR UPDATE
+                    """, (rs, row) -> new ApprovalState(SkuTemplateStatus.valueOf(rs.getString("status")),
+                    rs.getLong("version")), tenantId, skuId);
+            if (locked.isEmpty() || locked.getFirst().status() != SkuTemplateStatus.PENDING_APPROVAL) {
+                throw skuError(BenefitErrorCode.SKU_APPROVAL_NOT_PENDING,
+                        "only a PENDING_APPROVAL SKU can retry workflow start");
+            }
+            ApprovalState state = locked.getFirst();
+            if (state.version() != expectedVersion) {
+                throw skuError(BenefitErrorCode.SKU_VERSION_CONFLICT, "SKU version conflict");
+            }
+            BenefitSku current = catalog.findSku(tenantId, skuId)
+                    .orElseThrow(() -> skuError(BenefitErrorCode.SKU_APPROVAL_NOT_PENDING,
+                            "PENDING_APPROVAL SKU no longer exists"));
+            enqueueWorkflowStart(tenantId, current, Math.subtractExact(expectedVersion, 1L),
+                    expectedVersion, initiator);
+            return new SkuSubmitAcceptance(skuId, SkuTemplateStatus.PENDING_APPROVAL.name(), expectedVersion);
+        });
+    }
+
+    /**
+     * 将尚未落地的审批退回草稿。这里故意不操作流程实例：实例生命周期属于流程台，且调用方可能
+     * 正在处理迟到的 start；权益侧只用乐观锁发布新的 SKU 真相，迟到的审批决定会被状态校验拒绝。
+     */
+    @Override
+    public SkuSubmitAcceptance withdrawSkuApproval(String tenantId, String skuId, long expectedVersion) {
+        require("tenantId", tenantId);
+        require("skuId", skuId);
+        if (expectedVersion < 1) throw new IllegalArgumentException("expectedVersion must be positive");
+        return unitOfWork.required(() -> {
+            List<ApprovalState> locked = jdbc.query("""
+                    SELECT status,version FROM bc_benefit_sku
+                    WHERE tenant_id=? AND sku_id=? FOR UPDATE
+                    """, (rs, row) -> new ApprovalState(SkuTemplateStatus.valueOf(rs.getString("status")),
+                    rs.getLong("version")), tenantId, skuId);
+            if (locked.isEmpty() || locked.getFirst().status() != SkuTemplateStatus.PENDING_APPROVAL) {
+                throw skuError(BenefitErrorCode.SKU_APPROVAL_NOT_PENDING,
+                        "only a PENDING_APPROVAL SKU can be withdrawn to DRAFT");
+            }
+            ApprovalState state = locked.getFirst();
+            if (state.version() != expectedVersion) {
+                throw skuError(BenefitErrorCode.SKU_VERSION_CONFLICT, "SKU version conflict");
+            }
+            BenefitSku current = catalog.findSku(tenantId, skuId)
+                    .orElseThrow(() -> skuError(BenefitErrorCode.SKU_APPROVAL_NOT_PENDING,
+                            "PENDING_APPROVAL SKU no longer exists"));
+            int updated = jdbc.update("""
+                    UPDATE bc_benefit_sku SET status='DRAFT',version=version+1
+                    WHERE tenant_id=? AND sku_id=? AND status='PENDING_APPROVAL' AND version=?
+                    """, tenantId, skuId, expectedVersion);
+            if (updated != 1) {
+                throw skuError(BenefitErrorCode.SKU_VERSION_CONFLICT,
+                        "SKU approval withdrawal lost its optimistic lock");
+            }
+
+            long draftVersion = Math.addExact(expectedVersion, 1L);
+            TemplateValues values = valuesOf(current);
+            insertTemplateSnapshot(tenantId, skuId, current.type(), values,
+                    SkuTemplateStatus.DRAFT, draftVersion);
+            enqueueSkuChanged(tenantId, skuId, current.type(), values,
+                    SkuTemplateStatus.DRAFT, draftVersion);
+            invalidateTemplateAfterCommit(tenantId, skuId);
+            return new SkuSubmitAcceptance(skuId, SkuTemplateStatus.DRAFT.name(), draftVersion);
+        });
+    }
+
+    /**
      * 按 eventId 与 actionId 双层去重落地 workflow 决定；状态更新、模板事件和 action.applied 同事务提交。
      */
     @Override

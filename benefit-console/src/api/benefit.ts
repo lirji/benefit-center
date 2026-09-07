@@ -11,6 +11,7 @@ import type {
   RemediationView,
   RouteView,
   SkuView,
+  SkuApprovalRuntime,
   SkuSubmitAcceptance,
   TenantView,
   UserSession,
@@ -113,6 +114,18 @@ export const saveSku = (skuId: string, body: object) =>
 export const submitSkuApproval = (skuId: string, body: { expectedVersion: number }) =>
   api
     .post<SkuSubmitAcceptance>(`/admin/v1/skus/${encodeURIComponent(skuId)}:submit-for-approval`, body)
+    .then((r) => r.data)
+export const retrySkuApproval = (skuId: string, body: { expectedVersion: number }) =>
+  api
+    .post<SkuSubmitAcceptance>(`/admin/v1/skus/${encodeURIComponent(skuId)}:retry-approval`, body)
+    .then((r) => r.data)
+export const withdrawSkuApproval = (skuId: string, body: { expectedVersion: number }) =>
+  api
+    .post<SkuSubmitAcceptance>(`/admin/v1/skus/${encodeURIComponent(skuId)}:withdraw-approval`, body)
+    .then((r) => r.data)
+export const getSkuApprovalRuntime = (skuId: string) =>
+  api
+    .get<SkuApprovalRuntime>(`/admin/v1/skus/${encodeURIComponent(skuId)}/approval-runtime`)
     .then((r) => r.data)
 export const saveRoute = (routeId: string, body: object) =>
   api.put(`/admin/v1/routes/${encodeURIComponent(routeId)}`, body)

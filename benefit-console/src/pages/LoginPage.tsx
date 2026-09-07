@@ -20,7 +20,7 @@ const FEATURES = [
   { icon: <GiftOutlined />, title: '组合发放履约', desc: '现金、券、码与实物按 item 履约，部分成功可追踪' },
   { icon: <ToolOutlined />, title: '受控补发处置', desc: 'UNKNOWN 先查询，明确失败后才能补发或冲正' },
   { icon: <DatabaseOutlined />, title: '目录与库存', desc: 'SKU、路由和中心配额在同一工作台维护' },
-  { icon: <SafetyCertificateOutlined />, title: '租户隔离', desc: 'JWT audience 映射租户，控制台只看本租户数据' },
+  { icon: <SafetyCertificateOutlined />, title: '租户隔离', desc: '按货主业务租户隔离，登录组织 benefit-center 不是货主' },
 ]
 
 export function LoginPage() {
@@ -92,13 +92,13 @@ export function LoginPage() {
           <h2 className="login-form-title">{isOidc ? '欢迎进入权益运营台' : '进入本地开发模式'}</h2>
           <p className="login-form-sub">
             {isOidc
-              ? '输入已开通的组织，继续前往统一身份认证。'
-              : '当前为本地免登录模式。开发租户会写入 X-Tenant-Id，默认 dev-tenant。'}
+              ? '登录组织是 benefit-center，与营销的 marketing-platform 不同。货主来自 JWT 的 tenant_id，须与营销建活动时相同。'
+              : '这里填货主业务租户，写入 X-Tenant-Id，默认 dev-tenant。必须与营销创建活动时相同。营销 DEV 默认是 retail-cn；填不一样则对方看不到这些商品。'}
           </p>
 
           <Form layout="vertical" onSubmitCapture={submit} requiredMark={false}>
             <Form.Item
-              label={isOidc ? '所属组织 / 租户' : '开发租户 ID'}
+              label={isOidc ? '登录组织' : '货主业务租户'}
               validateStatus={tenantError ? 'error' : undefined}
               help={tenantError || undefined}
             >

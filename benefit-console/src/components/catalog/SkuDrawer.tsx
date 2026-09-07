@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
-import { Alert, Button, Drawer, Form, Input, InputNumber, Select, Space } from 'antd'
-import type { SkuTemplateStatus, SkuView, ValidityType } from '../../api/types'
+import { useEffect, useRef } from 'react'
+import { Alert, Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd'
+import type { SkuApprovalRuntime, SkuTemplateStatus, SkuView, ValidityType } from '../../api/types'
 import { SkuStatusTag } from '../common/StatusTag'
 import { fromDatetimeLocal, toDatetimeLocal } from '../../utils/format'
-import { workflowProcessHref, workflowTasksHref } from '../../utils/workflowHref'
+import { workflowProcessHref, workflowTasksFallbackUrl, workflowTasksHref } from '../../utils/workflowHref'
 import { canEditSkuFields, canSubmitSkuApproval, operationalStatusOptions } from './skuLifecycle'
 
 const WEEKDAYS = [
@@ -44,6 +44,12 @@ export function SkuDrawer({
   onClose,
   onSave,
   onSubmitApproval,
+  approvalRuntime,
+  runtimeLoading,
+  recovering,
+  onRetryApproval,
+  onWithdrawApproval,
+  tenantId,
 }: {
   open: boolean
   sku: SkuView | null
@@ -54,14 +60,26 @@ export function SkuDrawer({
   onClose: () => void
   onSave: (body: SkuSavePayload) => void
   onSubmitApproval: () => void
+  approvalRuntime?: SkuApprovalRuntime
+  runtimeLoading: boolean
+  recovering: boolean
+  onRetryApproval: () => void
+  onWithdrawApproval: () => void
+  tenantId?: string
 }) {
   const [form] = Form.useForm()
+  const submitRef = useRef<HTMLButtonElement>(null)
   const benefitType = Form.useWatch('benefitType', form)
   const validityType = Form.useWatch('validityType', form)
 
   useEffect(() => {
     if (open) form.setFieldsValue(skuFormValues(sku))
   }, [open, sku, form])
+  useEffect(() => {
+    if (open && sku && canSubmitSkuApproval(sku.status)) {
+      submitRef.current?.focus()
+    }
+  }, [open, sku])
   const status = (sku?.status ?? 'DRAFT') as SkuTemplateStatus
   const fieldsLocked = !canWrite || !canEditSkuFields(sku?.status) || status === 'PENDING_APPROVAL'
   const pending = status === 'PENDING_APPROVAL'
@@ -69,6 +87,9 @@ export function SkuDrawer({
   const businessKey = sku?.approvalBusinessKey || sku?.skuId || ''
   const processHref = pending ? workflowProcessHref(processKey, businessKey) : null
   const tasksHref = pending ? workflowTasksHref(processKey, businessKey) : null
+  const instanceMissing = pending && approvalRuntime?.instancePresent === false
+  const runtimeUnavailable = pending && !runtimeLoading && approvalRuntime == null
+  const fallbackTasksUrl = businessKey ? workflowTasksFallbackUrl(businessKey, processKey) : ''
   const opsOptions = sku ? operationalStatusOptions(sku.status) : null
 
   return (
@@ -81,19 +102,62 @@ export function SkuDrawer({
     >
       {pending && (
         <Alert
-          type="info"
+          type={instanceMissing || runtimeUnavailable ? 'warning' : 'info'}
           showIcon
           style={{ marginBottom: 16 }}
-          message="已提交上线审批，办理在流程中台"
+          message={runtimeLoading ? '正在核对审批实例' : instanceMissing ? '实例未建立' : runtimeUnavailable ? '暂时无法核对审批实例' : '已提交上线审批，办理在流程中台'}
           description={
             <Space direction="vertical" size={4}>
-              <span>状态落地前不能改字段。办理显示「已受理」，不是「已投放」。</span>
-              {processHref ? (
-                <a href={processHref} target="_blank" rel="noreferrer">查看审批轨迹</a>
-              ) : null}
-              {tasksHref ? (
-                <a href={tasksHref} target="_blank" rel="noreferrer">打开待办</a>
-              ) : null}
+              {runtimeLoading ? (
+                <span>正在向流程台查询同租户、同业务键的实例。</span>
+              ) : instanceMissing ? (
+                <>
+                  <span>流程中台已确认没有该业务键的实例，可重发原审批 start，或只把 SKU 退回草稿。</span>
+                  <span>SKU <Typography.Text copyable={{ text: sku?.skuId }}>{sku?.skuId}</Typography.Text></span>
+                  <span>租户 <Typography.Text copyable={{ text: tenantId }}>{tenantId || '—'}</Typography.Text></span>
+                  <span>业务键 <Typography.Text copyable={{ text: businessKey }}>{businessKey}</Typography.Text></span>
+                  {fallbackTasksUrl ? (
+                    <Typography.Paragraph copyable={{ text: fallbackTasksUrl }} style={{ marginBottom: 0 }}>
+                      {fallbackTasksUrl}
+                    </Typography.Paragraph>
+                  ) : null}
+                  <Space wrap>
+                    <Button type="primary" loading={recovering} disabled={!canWrite} onClick={onRetryApproval}>
+                      重发审批
+                    </Button>
+                    <Button
+                      danger
+                      loading={recovering}
+                      disabled={!canWrite}
+                      onClick={() => Modal.confirm({
+                        title: '退回草稿？',
+                        content: '该操作只把 SKU 退回 DRAFT，不会终止任何已存在或迟到建立的流程实例。',
+                        okText: '确认退回',
+                        cancelText: '取消',
+                        okButtonProps: { danger: true },
+                        onOk: onWithdrawApproval,
+                      })}
+                    >
+                      退回草稿
+                    </Button>
+                  </Space>
+                </>
+              ) : (
+                <>
+                  <span>{runtimeUnavailable ? '为避免误撤正在办理的审批，恢复按钮已禁用；请先到流程台核对。' : '状态落地前不能改字段。办理显示「已受理」，不是「已投放」。'}</span>
+                  {processHref ? (
+                    <a href={processHref} target="_blank" rel="noreferrer">查看审批轨迹</a>
+                  ) : null}
+                  {tasksHref ? (
+                    <a href={tasksHref} target="_blank" rel="noreferrer">打开待办</a>
+                  ) : null}
+                  {!processHref && !tasksHref && fallbackTasksUrl ? (
+                    <Typography.Paragraph copyable={{ text: fallbackTasksUrl }} style={{ marginBottom: 0 }}>
+                      {fallbackTasksUrl}
+                    </Typography.Paragraph>
+                  ) : null}
+                </>
+              )}
             </Space>
           }
         />
@@ -187,6 +251,7 @@ export function SkuDrawer({
       </Form>
       {sku == null || canSubmitSkuApproval(sku.status) ? (
         <Button
+          ref={submitRef}
           type="primary"
           aria-label="提交上线审批"
           loading={submitting}

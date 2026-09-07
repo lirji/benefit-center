@@ -130,6 +130,10 @@ class ConsoleQueryEndToEndTest {
         mvc.perform(get("/admin/v1/skus").header("X-Tenant-Id", "T1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.skuId=='SKU-X')]").isEmpty());
+        mvc.perform(get("/internal/v1/catalog/skus").header("X-Tenant-Id", "T1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.skuId=='SKU-1')]").isNotEmpty())
+                .andExpect(jsonPath("$[?(@.skuId=='SKU-X')]").isEmpty());
         mvc.perform(get("/admin/v1/routes").header("X-Tenant-Id", "T1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].routeId").value("R-1"))

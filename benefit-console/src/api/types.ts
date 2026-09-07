@@ -57,8 +57,14 @@ export type SkuView = {
 
 export type SkuSubmitAcceptance = {
   skuId: string
-  status: 'PENDING_APPROVAL'
+  status: 'DRAFT' | 'PENDING_APPROVAL'
   version: number
+}
+
+export type SkuApprovalRuntime = {
+  instancePresent: boolean
+  definitionStatus: 'DEPLOYED' | 'DEFINITION_MISSING' | 'UNKNOWN'
+  processInstanceId?: string | null
 }
 
 export type WalletView = {

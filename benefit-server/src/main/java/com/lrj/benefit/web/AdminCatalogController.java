@@ -66,6 +66,47 @@ public class AdminCatalogController {
                 skuId, "PENDING_APPROVAL", Math.addExact(body.expectedVersion(), 1L)));
     }
 
+    /**
+     * 重提卡住的审批 start。接口不修改 SKU 版本；重复 HTTP 命令和重复 workflow start 都有独立幂等保护。
+     */
+    @PostMapping("/skus/{skuId}:retry-approval")
+    public ResponseEntity<CatalogAdminUseCase.SkuSubmitAcceptance> retrySkuApproval(
+            @PathVariable String skuId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = "X-Operator", defaultValue = "benefit-center-admin") String assertedOperator,
+            @RequestBody CatalogAdminUseCase.SkuRetryCommand body,
+            Authentication authentication) {
+        if (body.expectedVersion() == null) {
+            throw new IllegalArgumentException("expectedVersion is required");
+        }
+        String tenantId = TenantContext.required();
+        CatalogAdminUseCase.SkuSubmitAcceptance acceptance = idempotency.executeForResult(
+                tenantId, idempotencyKey, "sku-retry-approval:" + skuId, hasher.hash(body),
+                () -> admin.retrySkuApproval(tenantId, skuId, body.expectedVersion(),
+                        operator(authentication, assertedOperator)),
+                CatalogAdminUseCase.SkuSubmitAcceptance.class);
+        return ResponseEntity.accepted().body(acceptance);
+    }
+
+    /**
+     * 将死 PENDING 退回可编辑草稿。该操作不终止流程实例；控制台只在确认未建立实例时暴露入口。
+     */
+    @PostMapping("/skus/{skuId}:withdraw-approval")
+    public ResponseEntity<CatalogAdminUseCase.SkuSubmitAcceptance> withdrawSkuApproval(
+            @PathVariable String skuId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody CatalogAdminUseCase.SkuWithdrawCommand body) {
+        if (body.expectedVersion() == null) {
+            throw new IllegalArgumentException("expectedVersion is required");
+        }
+        String tenantId = TenantContext.required();
+        CatalogAdminUseCase.SkuSubmitAcceptance acceptance = idempotency.executeForResult(
+                tenantId, idempotencyKey, "sku-withdraw-approval:" + skuId, hasher.hash(body),
+                () -> admin.withdrawSkuApproval(tenantId, skuId, body.expectedVersion()),
+                CatalogAdminUseCase.SkuSubmitAcceptance.class);
+        return ResponseEntity.ok(acceptance);
+    }
+
     @PutMapping("/routes/{routeId}")
     public ResponseEntity<Void> saveRoute(@PathVariable String routeId,
                                           @RequestHeader("Idempotency-Key") String idempotencyKey,

@@ -36,7 +36,9 @@ public class BenefitExceptionAdvice {
             case SKU_NOT_FOUND -> HttpStatus.UNPROCESSABLE_ENTITY;
             case SKU_NOT_ACTIVE -> HttpStatus.UNPROCESSABLE_ENTITY;
             case SKU_NOT_DRAFT, SKU_VERSION_CONFLICT, SKU_APPROVAL_LOCKED,
-                    SKU_ILLEGAL_TRANSITION, SKU_SUBMIT_IN_FLIGHT -> HttpStatus.CONFLICT;
+                    SKU_ILLEGAL_TRANSITION, SKU_SUBMIT_IN_FLIGHT,
+                    SKU_APPROVAL_NOT_PENDING -> HttpStatus.CONFLICT;
+            case APPROVAL_RUNTIME_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case WALLET_ENTRY_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case WALLET_ILLEGAL_TRANSITION, WALLET_ALREADY_USED,
                     WALLET_VERSION_CONFLICT, WALLET_EXPIRED -> HttpStatus.CONFLICT;

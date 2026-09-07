@@ -13,6 +13,11 @@ public interface CatalogAdminUseCase {
     void saveSku(String tenantId, SkuCommand command);
     SkuSubmitAcceptance submitSkuForApproval(String tenantId, String skuId, long expectedVersion,
                                              String initiator);
+    /** PENDING 卡住时重发原审批周期的 start；workflow 端按原幂等键返回既有实例或首次创建。 */
+    SkuSubmitAcceptance retrySkuApproval(String tenantId, String skuId, long expectedVersion,
+                                         String initiator);
+    /** 将尚未落地的审批退回草稿；只改变 SKU，不终止可能已经存在的流程实例。 */
+    SkuSubmitAcceptance withdrawSkuApproval(String tenantId, String skuId, long expectedVersion);
     void saveRoute(String tenantId, RouteCommand command);
     void adjustInventory(String tenantId, InventoryCommand command, String operator);
     void importCode(String tenantId, CodeAssetCommand command, String operator);
@@ -28,6 +33,8 @@ public interface CatalogAdminUseCase {
                       Long userLimitTotal, String equivalentSkuId, Long expectedVersion) {}
     /** 提交只表示审批请求已受理，不能据此宣称模板已经投放。 */
     record SkuSubmitCommand(Long expectedVersion) {}
+    record SkuRetryCommand(Long expectedVersion) {}
+    record SkuWithdrawCommand(Long expectedVersion) {}
     record SkuSubmitAcceptance(String skuId, String status, long version) {}
     record RouteCommand(String routeId, String skuId, int priority, String channelCode,
                         InventoryOwnerType ownerType, String fallbackRouteId, String reserveMode,

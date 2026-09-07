@@ -13,6 +13,7 @@ tags:
   - name: Awards
   - name: Wallet
   - name: Remediation
+  - name: Internal catalog
   - name: Administration
   - name: Console
   - name: Channel callbacks
@@ -163,6 +164,39 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/catalog/skus:
+    get:
+      tags: [Internal catalog]
+      operationId: listInternalBenefitSkus
+      summary: List tenant-scoped benefit SKUs for trusted internal consumers
+      description: |
+        A configured machine subject authenticates the caller. X-Tenant-Id selects the upstream-verified
+        business tenant only on this delegated endpoint; it is never derived from the login organization owner.
+      security:
+        - bearerAuth: [benefit.catalog.read]
+      parameters:
+        - $ref: '#/components/parameters/BusinessTenantId'
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/SkuTemplateStatus' }
+        - in: query
+          name: afterSkuId
+          schema: { type: string, maxLength: 128 }
+        - $ref: '#/components/parameters/ConsoleLimit'
+      responses:
+        '200':
+          description: SKU list limited to the asserted business tenant. An empty array means that tenant has no matching ACTIVE SKU.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SkuView' }
+        '401':
+          description: Missing or invalid dedicated machine authentication.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '403':
+          description: BENEFIT_TENANT_REQUIRED or BENEFIT_TENANT_MISMATCH for invalid delegation; otherwise the machine identity lacks benefit.catalog.read.
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Error' } } }
   /internal/v1/remediations:
     post:
       tags: [Remediation]
@@ -268,6 +302,86 @@ paths:
               schema: { $ref: '#/components/schemas/SkuSubmitAcceptance' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/skus/{skuId}:retry-approval:
+    post:
+      tags: [Administration]
+      operationId: retryBenefitSkuApproval
+      description: |
+        Re-enqueues the current PENDING_APPROVAL workflow start with the original workflow idempotency key.
+        The console should offer this only when approval-runtime confirms that no process instance exists or
+        operations confirms that the start event entered DLQ. This does not bump the SKU version or open a new cycle.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: path
+          name: skuId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuRetryCommand' }
+      responses:
+        '202':
+          description: Workflow start accepted for retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkuSubmitAcceptance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/skus/{skuId}:withdraw-approval:
+    post:
+      tags: [Administration]
+      operationId: withdrawBenefitSkuApproval
+      description: |
+        Moves a PENDING_APPROVAL SKU back to DRAFT using optimistic locking. It does not terminate or mutate any
+        workflow instance; operators must inspect an existing instance in workflow-platform separately.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: path
+          name: skuId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SkuWithdrawCommand' }
+      responses:
+        '200':
+          description: SKU returned to DRAFT; a replay of the same idempotency key returns the original response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkuApprovalState' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/v1/skus/{skuId}/approval-runtime:
+    get:
+      tags: [Administration]
+      operationId: getBenefitSkuApprovalRuntime
+      description: Read-only same-tenant workflow lookup used to distinguish a missing process from an active approval.
+      security:
+        - bearerAuth: [benefit.admin]
+      parameters:
+        - in: path
+          name: skuId
+          required: true
+          schema: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: Current workflow definition and instance presence
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkuApprovalRuntime' }
+        '503':
+          description: Workflow runtime could not be queried; recovery actions must remain unavailable
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Error' }
   /admin/v1/tenants/{tenantId}:
     put:
       tags: [Administration]
@@ -573,9 +687,16 @@ components:
           scopes:
             benefit.award.write: Submit award intents
             benefit.award.read: Query award state
+            benefit.catalog.read: Read the tenant-scoped benefit catalog
             benefit.remediate: Submit and query remediation
             benefit.admin: Manage catalog and owned inventory
   parameters:
+    BusinessTenantId:
+      in: header
+      name: X-Tenant-Id
+      required: true
+      description: Business tenant already verified by the trusted upstream service.
+      schema: { type: string, minLength: 1, maxLength: 128 }
     IdempotencyKey:
       in: header
       name: Idempotency-Key
@@ -761,6 +882,18 @@ components:
       required: [expectedVersion]
       properties:
         expectedVersion: { type: integer, format: int64, minimum: 0 }
+    SkuRetryCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, format: int64, minimum: 1 }
+    SkuWithdrawCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, format: int64, minimum: 1 }
     SkuSubmitAcceptance:
       type: object
       additionalProperties: false
@@ -769,6 +902,22 @@ components:
         skuId: { type: string, maxLength: 128 }
         status: { type: string, enum: [PENDING_APPROVAL] }
         version: { type: integer, format: int64, minimum: 1 }
+    SkuApprovalState:
+      type: object
+      additionalProperties: false
+      required: [skuId, status, version]
+      properties:
+        skuId: { type: string, maxLength: 128 }
+        status: { type: string, enum: [DRAFT, PENDING_APPROVAL] }
+        version: { type: integer, format: int64, minimum: 1 }
+    SkuApprovalRuntime:
+      type: object
+      additionalProperties: false
+      required: [instancePresent, definitionStatus]
+      properties:
+        instancePresent: { type: boolean }
+        definitionStatus: { type: string, enum: [DEPLOYED, DEFINITION_MISSING, UNKNOWN] }
+        processInstanceId: { type: string, nullable: true }
     SkuTemplateStatus:
       type: string
       enum: [DRAFT, PENDING_APPROVAL, ACTIVE, PAUSED, RETIRED]
@@ -986,6 +1135,6 @@ components:
         instance: { type: string, format: uri, nullable: true }
         code:
           type: string
-          enum: [INVALID_INTENT, IDEMPOTENCY_PAYLOAD_CONFLICT, SKU_NOT_FOUND, SKU_NOT_ACTIVE, SKU_NOT_DRAFT, SKU_VERSION_CONFLICT, SKU_APPROVAL_LOCKED, SKU_ILLEGAL_TRANSITION, SKU_SUBMIT_IN_FLIGHT, WALLET_ENTRY_NOT_FOUND, WALLET_ILLEGAL_TRANSITION, WALLET_ALREADY_USED, WALLET_VERSION_CONFLICT, WALLET_EXPIRED, USER_LIMIT_EXCEEDED, INVENTORY_INSUFFICIENT, CHANNEL_RETRYABLE, CHANNEL_FINAL_FAILURE, CHANNEL_RESULT_UNKNOWN, REMEDIATION_NOT_ALLOWED, INTERNAL_ERROR]
+          enum: [INVALID_INTENT, IDEMPOTENCY_PAYLOAD_CONFLICT, SKU_NOT_FOUND, SKU_NOT_ACTIVE, SKU_NOT_DRAFT, SKU_VERSION_CONFLICT, SKU_APPROVAL_LOCKED, SKU_ILLEGAL_TRANSITION, SKU_SUBMIT_IN_FLIGHT, SKU_APPROVAL_NOT_PENDING, APPROVAL_RUNTIME_UNAVAILABLE, WALLET_ENTRY_NOT_FOUND, WALLET_ILLEGAL_TRANSITION, WALLET_ALREADY_USED, WALLET_VERSION_CONFLICT, WALLET_EXPIRED, USER_LIMIT_EXCEEDED, INVENTORY_INSUFFICIENT, CHANNEL_RETRYABLE, CHANNEL_FINAL_FAILURE, CHANNEL_RESULT_UNKNOWN, REMEDIATION_NOT_ALLOWED, INTERNAL_ERROR]
         message: { type: string, deprecated: true, description: Compatibility alias of detail. }
         timestamp: { type: string, format: date-time }

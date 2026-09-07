@@ -18,6 +18,12 @@ services:
       BENEFIT_OUTBOX_ENABLED: "true"
       BENEFIT_AWARD_INTENT_CONSUMER_ENABLED: "true"
       BENEFIT_REMEDIATION_CONSUMER_ENABLED: "true"
+      # SKU 上线审批 Kafka 闭环；默认关闭，仅由本机/目标环境显式开启。
+      WORKFLOW_KAFKA_ENABLED: ${WORKFLOW_KAFKA_ENABLED:-false}
+      WORKFLOW_KAFKA_SOURCE_SIGNING_KEYS: ${WORKFLOW_KAFKA_SOURCE_SIGNING_KEYS:-}
+      # 仅用于控制台判断审批实例是否已建立；流程台开启 OAuth2 时再显式提供机器 token。
+      WORKFLOW_HTTP_BASE_URL: ${WORKFLOW_HTTP_BASE_URL:-http://workflow-server:8300}
+      WORKFLOW_HTTP_BEARER_TOKEN: ${WORKFLOW_HTTP_BEARER_TOKEN:-}
     ports: ["127.0.0.1:8183:8083"]
     networks:
       - dev-infra
@@ -31,6 +37,8 @@ services:
     build:
       context: ../benefit-console
       dockerfile: Dockerfile
+      args:
+        VITE_WORKFLOW_CONSOLE_ORIGIN: ${VITE_WORKFLOW_CONSOLE_ORIGIN:-}
     restart: unless-stopped
     environment:
       BENEFIT_API_URL: http://benefit-center:8083

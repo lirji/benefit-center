@@ -55,6 +55,8 @@ benefit:
     dev-mode: ${BENEFIT_SECURITY_DEV_MODE:false}
     jwk-set-uri: ${BENEFIT_JWK_SET_URI:http://localhost:8000/.well-known/jwks}
     audience-tenants: ${BENEFIT_AUDIENCE_TENANTS:}
+    # 仅这些机器主体可在固定 M2M 接口上通过 X-Tenant-Id 委派业务租户。
+    delegated-tenant-subjects: ${BENEFIT_DELEGATED_TENANT_SUBJECTS:}
   callback:
     secrets: ${BENEFIT_CALLBACK_SECRETS:}
   worker:
@@ -82,6 +84,11 @@ benefit:
     consumer-group: ${BENEFIT_REMEDIATION_CONSUMER_GROUP:benefit-remediation-v1}
     auto-enabled: ${BENEFIT_REMEDIATION_AUTO_ENABLED:false}
 workflow:
+  http:
+    base-url: ${WORKFLOW_HTTP_BASE_URL:http://localhost:8300}
+    bearer-token: ${WORKFLOW_HTTP_BEARER_TOKEN:}
+    connect-timeout: ${WORKFLOW_HTTP_CONNECT_TIMEOUT:PT2S}
+    request-timeout: ${WORKFLOW_HTTP_REQUEST_TIMEOUT:PT3S}
   kafka:
     # 本地可开；生产必须显式开启 consumer 并配置 source/tenant 绑定与 HMAC 密钥。
     enabled: ${WORKFLOW_KAFKA_ENABLED:false}
