@@ -12,6 +12,12 @@
     <name>benefit-adapters</name>
     <dependencies>
         <dependency>
+            <groupId>org.mybatis</groupId><artifactId>mybatis</artifactId><version>3.5.16</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis</groupId><artifactId>mybatis-spring</artifactId><version>3.0.3</version>
+        </dependency>
+        <dependency>
             <groupId>com.lrj.benefit</groupId>
             <artifactId>benefit-application</artifactId>
         </dependency>

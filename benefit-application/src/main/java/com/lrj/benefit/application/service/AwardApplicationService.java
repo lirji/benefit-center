@@ -18,11 +18,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.LinkedHashMap;
 
+/** 原子受理及永久来源幂等；可选SKU版本由主库锁定快照裁决。 */
 public final class AwardApplicationService implements AcceptAwardIntentUseCase, QueryAwardOrderUseCase {
     private final AwardRepository awards;
     private final BenefitCatalogRepository catalog;
     private final SkuTemplateCache templateCache;
+    private final SkuAcceptanceRepository skuAcceptance;
     private final InventoryRepository inventory;
     private final UserLimitRepository userLimits;
     private final UserLimitPrecheck limitPrecheck;
@@ -35,14 +40,30 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
     private final AwardIntentHasher hasher = new AwardIntentHasher();
     private final RoutePolicy routePolicy = new RoutePolicy();
 
+    /** 兼容原组装调用；未提供锁端口时拒绝版本请求，不退回缓存。 */
     public AwardApplicationService(AwardRepository awards, BenefitCatalogRepository catalog,
                                    SkuTemplateCache templateCache, InventoryRepository inventory,
                                    UserLimitRepository userLimits, UserLimitPrecheck limitPrecheck,
                                    OperationRepository operations,
                                    OutboxRepository outbox, UnitOfWork unitOfWork, IdGenerator ids, Clock clock) {
+        this(awards, catalog, templateCache, inventory, userLimits, limitPrecheck, operations,
+                outbox, unitOfWork, ids, clock, (tenant, sku) -> {
+                    throw new BenefitApplicationException(BenefitErrorCode.SKU_VERSION_CONFLICT,
+                            "locked SKU acceptance is unavailable");
+                });
+    }
+
+    /** 锁端口与原仓储共用受理事务，只影响实际指定版本的新请求。 */
+    public AwardApplicationService(AwardRepository awards, BenefitCatalogRepository catalog,
+                                   SkuTemplateCache templateCache, InventoryRepository inventory,
+                                   UserLimitRepository userLimits, UserLimitPrecheck limitPrecheck,
+                                   OperationRepository operations,
+                                   OutboxRepository outbox, UnitOfWork unitOfWork, IdGenerator ids, Clock clock,
+                                   SkuAcceptanceRepository skuAcceptance) {
         this.awards = Objects.requireNonNull(awards);
         this.catalog = Objects.requireNonNull(catalog);
         this.templateCache = Objects.requireNonNull(templateCache);
+        this.skuAcceptance = Objects.requireNonNull(skuAcceptance);
         this.inventory = Objects.requireNonNull(inventory);
         this.userLimits = Objects.requireNonNull(userLimits);
         this.limitPrecheck = Objects.requireNonNull(limitPrecheck);
@@ -118,6 +139,14 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
             outbox.enqueue(new MessageEnvelope<>(ids.next("EV"), "FULFILLMENT_EXPECTED", "1.0", order.tenantId(),
                     now, intent.trace().get("traceId"), item.itemNo(), expected));
         }
+        // 额度、库存及Outbox也可能等待锁；最终裁决前再检查，过期则连同已做的写入一起回滚。
+        Instant completedAt = clock.instant();
+        for (ItemPlan plan : plans) {
+            if (plan.intent().expectedSkuVersion() != null && !plan.sku().acceptsAt(completedAt)) {
+                throw new BenefitApplicationException(BenefitErrorCode.SKU_NOT_ACTIVE,
+                        "locked benefit SKU validity window ended during acceptance");
+            }
+        }
         return new AcceptResult(order.orderNo(), order.status(), false);
     }
 
@@ -156,9 +185,12 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
     }
 
     private List<ItemPlan> plan(String tenantId, AwardIntent intent) {
+        Map<String, BenefitSku> locked = lockExpectedSkus(tenantId, intent);
         List<ItemPlan> plans = new ArrayList<>();
         for (AwardItemIntent item : intent.items()) {
-            BenefitSku sku = templateCache.findCurrent(tenantId, item.benefitSkuId())
+            BenefitSku sku = (locked.containsKey(item.benefitSkuId())
+                    ? Optional.of(locked.get(item.benefitSkuId()))
+                    : templateCache.findCurrent(tenantId, item.benefitSkuId()))
                     .orElseThrow(() -> new BenefitApplicationException(BenefitErrorCode.SKU_NOT_FOUND,
                             "benefit SKU is missing: " + item.benefitSkuId()));
             if (!sku.acceptsAt(clock.instant())) {
@@ -184,7 +216,37 @@ public final class AwardApplicationService implements AcceptAwardIntentUseCase, 
                     && candidate.ownerType() == InventoryOwnerType.CENTER_STOCK));
             plans.add(new ItemPlan(item, sku, route, reserveCenterStock));
         }
+        // 后续模板锁和路由读取可能等待，规划完成后复检最早取得的模板时间窗口。
+        Instant now = clock.instant();
+        for (BenefitSku sku : locked.values()) {
+            if (!sku.acceptsAt(now)) throw new BenefitApplicationException(BenefitErrorCode.SKU_NOT_ACTIVE,
+                    "locked benefit SKU validity window has ended");
+        }
         return List.copyOf(plans);
+    }
+
+    /** 多项先按SKU排序取锁，避免不同请求按A/B反序获取锁。 */
+    private Map<String, BenefitSku> lockExpectedSkus(String tenantId, AwardIntent intent) {
+        Map<String, Long> expected = new TreeMap<>();
+        for (AwardItemIntent item : intent.items()) {
+            if (item.expectedSkuVersion() == null) continue;
+            Long previous = expected.putIfAbsent(item.benefitSkuId(), item.expectedSkuVersion());
+            if (previous != null && !previous.equals(item.expectedSkuVersion())) {
+                throw new BenefitApplicationException(BenefitErrorCode.SKU_VERSION_CONFLICT,
+                        "one SKU cannot require two versions in the same intent");
+            }
+        }
+        Map<String, BenefitSku> result = new LinkedHashMap<>();
+        expected.forEach((id, version) -> {
+            BenefitSku sku = skuAcceptance.lockCurrent(tenantId, id).orElseThrow(() ->
+                    new BenefitApplicationException(BenefitErrorCode.SKU_NOT_FOUND, "benefit SKU is missing"));
+            if (!sku.tenantId().equals(tenantId) || !sku.skuId().equals(id) || sku.version() != version) {
+                throw new BenefitApplicationException(BenefitErrorCode.SKU_VERSION_CONFLICT,
+                        "benefit SKU version differs from the expected version");
+            }
+            result.put(id, sku);
+        });
+        return result;
     }
 
     private static AcceptResult replay(AwardOrder order, String requestHash) {

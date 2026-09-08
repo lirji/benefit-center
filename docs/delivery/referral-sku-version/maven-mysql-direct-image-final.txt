@@ -1,0 +1,76 @@
+11:29:20.156 [main] INFO org.testcontainers.images.PullPolicy -- Found configured Image Pull Policy: class com.lrj.benefit.web.SingleImagePullPolicy
+11:29:20.158 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: com.lrj.benefit.web.SingleImagePullPolicy@202b0582
+11:29:20.160 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+11:29:20.188 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 2.0.3
+11:29:22.886 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with Environment variables, system properties and defaults. Resolved dockerHost=unix:///Users/liruijun/.docker/run/docker.sock
+11:29:22.889 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+11:29:23.063 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 29.7.2
+  API Version: 1.55
+  Operating System: Docker Desktop
+  Total Memory: 23994 MB
+  Labels: 
+    com.docker.desktop.address=unix:///Users/liruijun/Library/Containers/com.docker.docker/Data/docker-cli.sock
+11:29:28.296 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Creating container for image: testcontainers/ryuk:0.13.0
+11:29:28.529 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Credential helper/store (docker-credential-desktop) does not have credentials for https://index.docker.io/v1/
+11:29:35.052 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Container testcontainers/ryuk:0.13.0 is starting: 3241fe09a36205acda33d184acdfeb963268c510bc940cb2d6e0ee3ee7b3ae67
+11:29:46.808 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Container testcontainers/ryuk:0.13.0 started in PT18.512167S
+11:29:46.884 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+11:29:46.884 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+11:29:46.885 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+11:29:53.774 [main] INFO tc.mysql:8.4.11 -- Creating container for image: mysql:8.4.11
+11:29:59.358 [main] INFO tc.mysql:8.4.11 -- Container mysql:8.4.11 is starting: b2bc1a312a29115dc4751922b43b61cfec0f93d0f6babd8753ca899e60951839
+11:30:17.474 [main] INFO tc.mysql:8.4.11 -- Waiting for database connection to become available at jdbc:mysql://localhost:62343/sku_version_acceptance using query 'SELECT 1'
+11:33:22.098 [main] INFO tc.mysql:8.4.11 -- Container mysql:8.4.11 started in PT3M28.323943S
+11:33:22.101 [main] INFO tc.mysql:8.4.11 -- Container is started (JDBC URL: jdbc:mysql://localhost:62343/sku_version_acceptance)
+11:33:22.283 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.lrj.benefit.web.SkuVersionAcceptanceMySqlTest]: SkuVersionAcceptanceMySqlTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+11:33:22.492 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.lrj.benefit.BenefitCenterApplication for test class com.lrj.benefit.web.SkuVersionAcceptanceMySqlTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.3.5)
+
+2026-09-08T11:33:23.049+08:00  INFO 57202 --- [benefit-center] [           main] c.l.b.web.SkuVersionAcceptanceMySqlTest  : Starting SkuVersionAcceptanceMySqlTest using Java 21.0.11 with PID 57202 (started by liruijun in /private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server)
+2026-09-08T11:33:23.050+08:00  INFO 57202 --- [benefit-center] [           main] c.l.b.web.SkuVersionAcceptanceMySqlTest  : No active profile set, falling back to 1 default profile: "default"
+2026-09-08T11:33:24.238+08:00  INFO 57202 --- [benefit-center] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-09-08T11:33:24.241+08:00  INFO 57202 --- [benefit-center] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-09-08T11:33:24.289+08:00  INFO 57202 --- [benefit-center] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 33 ms. Found 0 Redis repository interfaces.
+2026-09-08T11:33:24.934+08:00  INFO 57202 --- [benefit-center] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-08T11:33:25.199+08:00  INFO 57202 --- [benefit-center] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@67671db1
+2026-09-08T11:33:25.200+08:00  INFO 57202 --- [benefit-center] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-08T11:33:25.649+08:00  INFO 57202 --- [benefit-center] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://localhost:62343/sku_version_acceptance (MySQL 8.4)
+2026-09-08T11:33:25.761+08:00  WARN 57202 --- [benefit-center] [           main] o.f.c.internal.database.base.Database    : Flyway upgrade recommended: MySQL 8.4 is newer than this version of Flyway and support has not been tested. The latest supported version of MySQL is 8.1.
+2026-09-08T11:33:25.878+08:00  INFO 57202 --- [benefit-center] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `sku_version_acceptance`.`flyway_schema_history` does not exist yet
+2026-09-08T11:33:25.883+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 14 migrations (execution time 00:00.065s)
+2026-09-08T11:33:25.960+08:00  INFO 57202 --- [benefit-center] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `sku_version_acceptance`.`flyway_schema_history` ...
+2026-09-08T11:33:26.402+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `sku_version_acceptance`: << Empty Schema >>
+2026-09-08T11:33:26.434+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "1 - benefit center schema"
+2026-09-08T11:33:26.731+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "2 - benefit center indexes"
+2026-09-08T11:33:27.363+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "3 - worker leases"
+2026-09-08T11:33:27.781+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "4 - inbox recovery"
+2026-09-08T11:33:27.943+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "5 - sharding seams"
+2026-09-08T11:33:28.332+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "6 - operation backoff"
+2026-09-08T11:33:28.546+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "7 - remediation request hash"
+2026-09-08T11:33:28.649+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "8 - admin inventory audit"
+2026-09-08T11:33:28.872+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "9 - table comments"
+2026-09-08T11:33:30.181+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "10 - console query indexes"
+2026-09-08T11:33:30.277+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "11 - sku template wallet limits"
+2026-09-08T11:33:33.079+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "12 - slice1 comments"
+2026-09-08T11:33:37.647+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "13 - workflow partition key"
+2026-09-08T11:33:37.757+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `sku_version_acceptance` to version "14 - wallet entry commands"
+2026-09-08T11:33:38.179+08:00  INFO 57202 --- [benefit-center] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 14 migrations to schema `sku_version_acceptance`, now at version v14 (execution time 00:10.327s)
+2026-09-08T11:33:40.670+08:00  INFO 57202 --- [benefit-center] [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoints beneath base path '/actuator'
+2026-09-08T11:33:40.795+08:00  INFO 57202 --- [benefit-center] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-09-08T11:33:40.795+08:00  INFO 57202 --- [benefit-center] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T11:33:40.796+08:00  INFO 57202 --- [benefit-center] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-08T11:33:40.903+08:00  INFO 57202 --- [benefit-center] [           main] c.l.b.web.SkuVersionAcceptanceMySqlTest  : Started SkuVersionAcceptanceMySqlTest in 18.226 seconds (process running for 261.594)
+WARNING: A Java agent has been loaded dynamically (/Users/liruijun/personal/repository/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended

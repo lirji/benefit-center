@@ -1,0 +1,112 @@
+{
+  "scope": "7 MySQL tests only; 14 pure + 4 legacy HTTP separately archived",
+  "tests": 7,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "process": 27752,
+  "exit_code": 0,
+  "sources": [
+    {
+      "file": "benefit-adapters/pom.xml",
+      "sha256": "2fb61c503487c47cfa0916bfeac3534dc32bed41c32955b14834c155c62f19d9",
+      "snapshot_sha256": "2fb61c503487c47cfa0916bfeac3534dc32bed41c32955b14834c155c62f19d9"
+    },
+    {
+      "file": "benefit-adapters/src/main/java/com/lrj/benefit/adapters/config/BenefitCenterConfiguration.java",
+      "sha256": "ff61a25b62f0279f41ed86daff58dae26815c49b3893551891b7ebfdd561361e",
+      "snapshot_sha256": "ff61a25b62f0279f41ed86daff58dae26815c49b3893551891b7ebfdd561361e"
+    },
+    {
+      "file": "benefit-adapters/src/main/java/com/lrj/benefit/adapters/config/SkuAcceptanceConfiguration.java",
+      "sha256": "695529b5231c1c2209e4e94d5613eced3dde7b8156d91b54478c38f89e458d86",
+      "snapshot_sha256": "695529b5231c1c2209e4e94d5613eced3dde7b8156d91b54478c38f89e458d86"
+    },
+    {
+      "file": "benefit-adapters/src/main/java/com/lrj/benefit/adapters/persistence/MybatisSkuAcceptanceRepository.java",
+      "sha256": "d3685f60d3e25e8b8d0514f1fe1a9e926e48f7395142ede8b80485e4170de027",
+      "snapshot_sha256": "d3685f60d3e25e8b8d0514f1fe1a9e926e48f7395142ede8b80485e4170de027"
+    },
+    {
+      "file": "benefit-adapters/src/main/java/com/lrj/benefit/adapters/persistence/SkuAcceptanceMapper.java",
+      "sha256": "f831ddffceacae15ab07cd435040ba951c84b883ebf241f710f362da184ae393",
+      "snapshot_sha256": "f831ddffceacae15ab07cd435040ba951c84b883ebf241f710f362da184ae393"
+    },
+    {
+      "file": "benefit-adapters/src/main/resources/mapper/SkuAcceptanceMapper.xml",
+      "sha256": "5122e6370e73812bac0c380ee0b30c8918510d00a72307573539e45665efe595",
+      "snapshot_sha256": "5122e6370e73812bac0c380ee0b30c8918510d00a72307573539e45665efe595"
+    },
+    {
+      "file": "benefit-adapters/src/test/java/com/lrj/benefit/adapters/persistence/SkuVersionPlanningTest.java",
+      "sha256": "c24494fa8d95874b0318305fd2c8831fadc8ab493444246758d6af400fc8c5d9",
+      "snapshot_sha256": "c24494fa8d95874b0318305fd2c8831fadc8ab493444246758d6af400fc8c5d9"
+    },
+    {
+      "file": "benefit-application/src/main/java/com/lrj/benefit/application/port/out/SkuAcceptanceRepository.java",
+      "sha256": "8cd7985d1400ebac02b4ac6f2668b82def2d31045b1eb8aedde80e777e3122c5",
+      "snapshot_sha256": "8cd7985d1400ebac02b4ac6f2668b82def2d31045b1eb8aedde80e777e3122c5"
+    },
+    {
+      "file": "benefit-application/src/main/java/com/lrj/benefit/application/service/AwardApplicationService.java",
+      "sha256": "550288848b486eb5505533d8517f0f7925b549f6521053a0bf0be1d8822ddda9",
+      "snapshot_sha256": "550288848b486eb5505533d8517f0f7925b549f6521053a0bf0be1d8822ddda9"
+    },
+    {
+      "file": "benefit-application/src/main/java/com/lrj/benefit/application/service/AwardIntentHasher.java",
+      "sha256": "9a228eda6b338f1fe6cf6c18429587a0083a545506f27570bf4821872726f0e7",
+      "snapshot_sha256": "9a228eda6b338f1fe6cf6c18429587a0083a545506f27570bf4821872726f0e7"
+    },
+    {
+      "file": "benefit-application/src/test/java/com/lrj/benefit/application/service/AwardIntentHasherTest.java",
+      "sha256": "6f13bd86d179aadcdf9ce92453ec4a3dc2e9a590406c245e8843427ae91120ba",
+      "snapshot_sha256": "6f13bd86d179aadcdf9ce92453ec4a3dc2e9a590406c245e8843427ae91120ba"
+    },
+    {
+      "file": "benefit-contract/pom.xml",
+      "sha256": "f643a3c9b76bc8f5b6ce7f81993634de782f410b7937331ec2fc3805c2d90039",
+      "snapshot_sha256": "f643a3c9b76bc8f5b6ce7f81993634de782f410b7937331ec2fc3805c2d90039"
+    },
+    {
+      "file": "benefit-contract/src/main/java/com/lrj/benefit/contract/AwardItemIntent.java",
+      "sha256": "117ec1ed959d39c1591a1668d474d14e3d96f2ec69ef22548cf66917e45007ad",
+      "snapshot_sha256": "117ec1ed959d39c1591a1668d474d14e3d96f2ec69ef22548cf66917e45007ad"
+    },
+    {
+      "file": "benefit-contract/src/main/java/com/lrj/benefit/contract/ExpectedSkuVersionDeserializer.java",
+      "sha256": "97b2052543c4bc613fecf9a874f3835860d84a1c4ea3930cc10163087b73de11",
+      "snapshot_sha256": "97b2052543c4bc613fecf9a874f3835860d84a1c4ea3930cc10163087b73de11"
+    },
+    {
+      "file": "benefit-contract/src/main/resources/openapi/benefit-center-v1.yaml",
+      "sha256": "7da67416c3049794ea7216f7dbf9d9aef14bb494fda88c5abbce8d48ab2debb0",
+      "snapshot_sha256": "7da67416c3049794ea7216f7dbf9d9aef14bb494fda88c5abbce8d48ab2debb0"
+    },
+    {
+      "file": "benefit-contract/src/test/java/com/lrj/benefit/contract/AwardItemIntentTest.java",
+      "sha256": "96d71021873c6a7cfcd8f4c111ba30f0d209ac293924b1e3b52f50a4ef794440",
+      "snapshot_sha256": "96d71021873c6a7cfcd8f4c111ba30f0d209ac293924b1e3b52f50a4ef794440"
+    },
+    {
+      "file": "benefit-server/pom.xml",
+      "sha256": "5461cbf9f00a8e904290776d97df7e4eea31118964b3460ee4e806261f9de0bb",
+      "snapshot_sha256": "5461cbf9f00a8e904290776d97df7e4eea31118964b3460ee4e806261f9de0bb"
+    },
+    {
+      "file": "benefit-server/src/test/java/com/lrj/benefit/web/SingleImagePullPolicy.java",
+      "sha256": "1439c26f9508a55e10aa7b57350e658aa633bf906e87283ffd1090a496481a03",
+      "snapshot_sha256": "1439c26f9508a55e10aa7b57350e658aa633bf906e87283ffd1090a496481a03"
+    },
+    {
+      "file": "benefit-server/src/test/java/com/lrj/benefit/web/SkuVersionAcceptanceMySqlTest.java",
+      "sha256": "1e1ea5022d003564d666c735661849fed46c4f8ca813d28cca420222148bcfae",
+      "snapshot_sha256": "1e1ea5022d003564d666c735661849fed46c4f8ca813d28cca420222148bcfae"
+    },
+    {
+      "file": "benefit-server/src/test/resources/testcontainers.properties",
+      "sha256": "85888aeaf4070d24608bcb51620457ddf04a621bbda81313290908d6d99d7c8d",
+      "snapshot_sha256": "85888aeaf4070d24608bcb51620457ddf04a621bbda81313290908d6d99d7c8d"
+    }
+  ],
+  "all_sources_match": true
+}

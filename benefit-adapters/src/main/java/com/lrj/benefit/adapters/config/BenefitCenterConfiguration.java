@@ -134,9 +134,10 @@ public class BenefitCenterConfiguration {
                                                           OutboxRepository outbox,
                                                           UnitOfWork unitOfWork,
                                                           IdGenerator ids,
-                                                          Clock clock) {
+                                                          Clock clock,
+                                                          SkuAcceptanceRepository skuAcceptance) {
         return new AwardApplicationService(awards, catalog, templateCache, inventory, userLimits,
-                limitPrecheck, operations, outbox, unitOfWork, ids, clock);
+                limitPrecheck, operations, outbox, unitOfWork, ids, clock, skuAcceptance);
     }
     @Bean FulfillmentApplicationService fulfillmentApplicationService(
             AwardRepository awards, OperationRepository operations, BenefitCatalogRepository catalog,

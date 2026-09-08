@@ -1,0 +1,75 @@
+11:21:24.354 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+11:21:24.358 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+11:21:24.386 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 2.0.3
+11:21:25.899 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with Environment variables, system properties and defaults. Resolved dockerHost=unix:///Users/liruijun/.docker/run/docker.sock
+11:21:25.901 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+11:21:26.000 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 29.7.2
+  API Version: 1.55
+  Operating System: Docker Desktop
+  Total Memory: 23994 MB
+  Labels: 
+    com.docker.desktop.address=unix:///Users/liruijun/Library/Containers/com.docker.docker/Data/docker-cli.sock
+11:25:39.195 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Creating container for image: testcontainers/ryuk:0.13.0
+11:25:39.404 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Credential helper/store (docker-credential-desktop) does not have credentials for https://index.docker.io/v1/
+11:25:45.807 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Container testcontainers/ryuk:0.13.0 is starting: 184c1407861449bc575e003ac563c117169fdccb6cc47ade356a7987985bc3e0
+11:25:48.483 [main] INFO tc.testcontainers/ryuk:0.13.0 -- Container testcontainers/ryuk:0.13.0 started in PT9.287592S
+11:25:48.500 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+11:25:48.500 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+11:25:48.501 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+11:25:48.503 [main] INFO tc.mysql:8.4.11 -- Creating container for image: mysql:8.4.11
+11:25:49.348 [main] INFO tc.mysql:8.4.11 -- Container mysql:8.4.11 is starting: c12a810aaccadf0f10fa35fd42dfa0a865972d81eb45983a6176d1061d819a9d
+11:25:52.072 [main] INFO tc.mysql:8.4.11 -- Waiting for database connection to become available at jdbc:mysql://localhost:61700/sku_version_acceptance using query 'SELECT 1'
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project benefit-server: 
+[ERROR] 
+[ERROR] Please refer to /private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server/target/surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
+[ERROR] Command was /bin/sh -c cd '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server' && '/Users/liruijun/Library/Java/JavaVirtualMachines/ms-21.0.11/Contents/Home/bin/java' '-jar' '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server/target/surefire/surefirebooter-20260908112123393_3.jar' '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server/target/surefire' '2026-09-08T11-21-20_079-jvmRun1' 'surefire-20260908112123393_1tmp' 'surefire_0-20260908112123393_2tmp'
+[ERROR] Error occurred in starting fork, check output in log
+[ERROR] Process Exit Code: 143
+[ERROR] org.apache.maven.surefire.booter.SurefireBooterForkException: The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
+[ERROR] Command was /bin/sh -c cd '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server' && '/Users/liruijun/Library/Java/JavaVirtualMachines/ms-21.0.11/Contents/Home/bin/java' '-jar' '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server/target/surefire/surefirebooter-20260908112123393_3.jar' '/private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-server/target/surefire' '2026-09-08T11-21-20_079-jvmRun1' 'surefire-20260908112123393_1tmp' 'surefire_0-20260908112123393_2tmp'
+[ERROR] Error occurred in starting fork, check output in log
+[ERROR] Process Exit Code: 143
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.fork(ForkStarter.java:643)
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:285)
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:250)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeProvider(AbstractSurefireMojo.java:1241)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeAfterPreconditionsChecked(AbstractSurefireMojo.java:1090)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.execute(AbstractSurefireMojo.java:910)
+[ERROR] 	at org.apache.maven.plugin.DefaultBuildPluginManager.executeMojo(DefaultBuildPluginManager.java:126)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.doExecute2(MojoExecutor.java:328)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.doExecute(MojoExecutor.java:316)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.execute(MojoExecutor.java:212)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.execute(MojoExecutor.java:174)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.access$000(MojoExecutor.java:75)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor$1.run(MojoExecutor.java:162)
+[ERROR] 	at org.apache.maven.plugin.DefaultMojosExecutionStrategy.execute(DefaultMojosExecutionStrategy.java:39)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.execute(MojoExecutor.java:159)
+[ERROR] 	at org.apache.maven.lifecycle.internal.LifecycleModuleBuilder.buildProject(LifecycleModuleBuilder.java:105)
+[ERROR] 	at org.apache.maven.lifecycle.internal.LifecycleModuleBuilder.buildProject(LifecycleModuleBuilder.java:73)
+[ERROR] 	at org.apache.maven.lifecycle.internal.builder.singlethreaded.SingleThreadedBuilder.build(SingleThreadedBuilder.java:53)
+[ERROR] 	at org.apache.maven.lifecycle.internal.LifecycleStarter.execute(LifecycleStarter.java:118)
+[ERROR] 	at org.apache.maven.DefaultMaven.doExecute(DefaultMaven.java:261)
+[ERROR] 	at org.apache.maven.DefaultMaven.doExecute(DefaultMaven.java:173)
+[ERROR] 	at org.apache.maven.DefaultMaven.execute(DefaultMaven.java:101)
+[ERROR] 	at org.apache.maven.cli.MavenCli.execute(MavenCli.java:919)
+[ERROR] 	at org.apache.maven.cli.MavenCli.doMain(MavenCli.java:285)
+[ERROR] 	at org.apache.maven.cli.MavenCli.main(MavenCli.java:207)
+[ERROR] 	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+[ERROR] 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+[ERROR] 	at org.codehaus.plexus.classworlds.launcher.Launcher.launchEnhanced(Launcher.java:255)
+[ERROR] 	at org.codehaus.plexus.classworlds.launcher.Launcher.launch(Launcher.java:201)
+[ERROR] 	at org.codehaus.plexus.classworlds.launcher.Launcher.mainWithExitCode(Launcher.java:361)
+[ERROR] 	at org.codehaus.plexus.classworlds.launcher.Launcher.main(Launcher.java:314)
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :benefit-server

@@ -1,0 +1,15 @@
+[ERROR] Failed to execute goal on project benefit-server: Could not resolve dependencies for project com.lrj.benefit:benefit-server:jar:0.1.0-SNAPSHOT
+[ERROR] dependency: org.testcontainers:mysql:jar:1.21.3 (test)
+[ERROR] 	Cannot access aliyun-all (https://maven.aliyun.com/repository/public) in offline mode and the artifact org.testcontainers:mysql:jar:1.21.3 has not been downloaded from it before.
+[ERROR] dependency: org.testcontainers:junit-jupiter:jar:1.21.3 (test)
+[ERROR] 	Cannot access aliyun-all (https://maven.aliyun.com/repository/public) in offline mode and the artifact org.testcontainers:junit-jupiter:jar:1.21.3 has not been downloaded from it before.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/DependencyResolutionException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :benefit-server

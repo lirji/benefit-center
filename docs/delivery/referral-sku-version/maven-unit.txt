@@ -1,0 +1,31 @@
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/Users/liruijun/personal/repository/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[ERROR] Tests run: 7, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 1.256 s <<< FAILURE! -- in com.lrj.benefit.adapters.persistence.SkuVersionPlanningTest
+[ERROR] com.lrj.benefit.adapters.persistence.SkuVersionPlanningTest.successfulOriginalReplaysWithoutLookingAtNewVersion -- Time elapsed: 0.009 s <<< ERROR!
+java.lang.IllegalArgumentException: award order must contain items
+	at com.lrj.benefit.domain.model.AwardOrder.<init>(AwardOrder.java:38)
+	at com.lrj.benefit.adapters.persistence.SkuVersionPlanningTest.successfulOriginalReplaysWithoutLookingAtNewVersion(SkuVersionPlanningTest.java:75)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[ERROR] Errors: 
+[ERROR]   SkuVersionPlanningTest.successfulOriginalReplaysWithoutLookingAtNewVersion:75 » IllegalArgument award order must contain items
+[ERROR] Tests run: 7, Failures: 0, Errors: 1, Skipped: 0
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project benefit-adapters: 
+[ERROR] 
+[ERROR] Please refer to /private/var/folders/fh/4kj3hbdd6q1dbswkdz5l_fsr0000gn/T/benefit-sku-version-zwh9_icm/benefit-adapters/target/surefire-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :benefit-adapters

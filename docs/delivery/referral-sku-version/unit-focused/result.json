@@ -1,0 +1,23 @@
+[
+  {
+    "name": "com.lrj.benefit.contract.AwardItemIntentTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "com.lrj.benefit.application.service.AwardIntentHasherTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  },
+  {
+    "name": "com.lrj.benefit.adapters.persistence.SkuVersionPlanningTest",
+    "tests": "7",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+]

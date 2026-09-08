@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.lrj.benefit.adapters.persistence.SkuAcceptanceMapper">
+  <select id="lockCurrent" resultType="com.lrj.benefit.adapters.persistence.SkuAcceptanceMapper$Row" useCache="false" flushCache="true">
+    SELECT tenant_id,sku_id,benefit_type,face_value_minor,currency,status,validity_type,
+           valid_from,valid_to,relative_days,usable_weekdays,daily_quota,user_limit_per_day,
+           user_limit_total,equivalent_sku_id,version
+    FROM bc_benefit_sku WHERE tenant_id=#{tenantId} AND sku_id=#{skuId} FOR SHARE
+  </select>
+</mapper>

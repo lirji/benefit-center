@@ -112,3 +112,9 @@ OIDC 组织固定为 `benefit-center`，派生 client_id `ragshared0client000000
 ## 当前发布边界
 
 中心兑换码与中心实物适配器可用于参考闭环；通用 HTTP Adapter 仍是签名协议参考实现。任何真实渠道必须完成 `docs/channel-onboarding.md` 的 sandbox 契约测试后才能启用。真正多 Cell、租户搬迁和物理分库分表属于容量触发后的演进项，当前仅保留 `homeCell/routingKey/ShardRouter` 接缝。
+
+## 指定SKU版本受理
+
+发奖项支持可选`expectedSkuVersion`（非负，含历史世代0）。指定时原受理事务锁主库当前模板，要求版本一致且当前ACTIVE/在有效期内；不同版本返回`SKU_VERSION_CONFLICT`，不自动选用新版或历史版。多个SKU按稳定顺序锁定。无该字段或null仍使用旧请求路径和历史摘要，序列化不添加null属性。
+
+原成功请求在模板切版后继续按永久受理事实回放；同一sourceRequestId改变或移除版本前提会冲突。响应202只表示受理，不是履约成功。此能力是裂变冻结SKU的前置，真实裂变授权、资格消费、取消栅栏和生产签收仍按各项目门禁推进。详细方案与验证进度见[版本受理切片](docs/delivery/referral-sku-version/DELIVERY_PLAN.md)。

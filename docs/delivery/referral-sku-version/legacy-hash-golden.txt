@@ -1,0 +1,2 @@
+Computed using git HEAD original AwardIntentHasher.java, fixture source/business/test/coupon
+44d2ae3f732e8af4237f5d0cc31a5f575313d730b6ec3432cdf936aa1d558b71

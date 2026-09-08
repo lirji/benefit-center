@@ -10,8 +10,9 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.Map;
 
-/** Stable cross-entry-point request hash; maps are sorted and display strings are never used. */
+/** 跨入口稳定摘要；未指定SKU版本时保持历史字节以兼容原成功重放。 */
 public final class AwardIntentHasher {
+    /** 完整内容包含实际指定的版本前提，不能换版本复用同一受理键。 */
     public String hash(AwardIntent intent) {
         StringBuilder value = new StringBuilder(512);
         appendField(value, intent.schemaVersion());
@@ -38,6 +39,14 @@ public final class AwardIntentHasher {
             appendMap(value, item.metadata());
         });
         appendMap(value, intent.trace());
+        if (intent.items().stream().anyMatch(item -> item.expectedSkuVersion() != null)) {
+            appendField(value, "expected-sku-versions/1");
+            appendField(value, intent.items().size());
+            intent.items().stream().sorted(Comparator.comparing(AwardItemIntent::clientItemId)).forEach(item -> {
+                appendField(value, item.clientItemId());
+                appendField(value, item.expectedSkuVersion());
+            });
+        }
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(value.toString().getBytes(StandardCharsets.UTF_8)));

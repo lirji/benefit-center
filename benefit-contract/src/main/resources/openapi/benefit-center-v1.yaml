@@ -776,6 +776,12 @@ components:
         amountMinor: { type: integer, format: int64, minimum: 1, nullable: true }
         currency: { type: string, pattern: '^[A-Z]{3}$', nullable: true }
         quantity: { type: integer, format: int64, minimum: 1, maximum: 1 }
+        expectedSkuVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: 可选首次受理版本前提；主库锁下当前版本必须匹配，否则SKU_VERSION_CONFLICT。缺失或null保持旧请求摘要；原成功在切版后仍可回放。
         metadata:
           type: object
           additionalProperties: { type: string, maxLength: 256 }
