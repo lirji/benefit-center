@@ -27,3 +27,9 @@
 `BENEFIT_HTTP_CHANNEL_ENABLED=true`；任一为 false 都不会注册真实 HTTP Adapter。
 `BENEFIT_HTTP_CHANNEL_CONNECT_TIMEOUT_MS`/`READ_TIMEOUT_MS` 必须按渠道 SLA 显式复核，且 worker
 lease 应覆盖最坏调用与本地收敛时间；timeout 一律映射 `UNKNOWN` 后查询原 operation。
+
+## 中心钱包现金
+
+`CENTER_WALLET_CASH` 将现金型权益记入中心钱包，适用于使用 `CENTER_QUOTA` 的现金 SKU。运行实例通过 `BENEFIT_CENTER_WALLET_CASH_ENABLED=true` 注册此通道，默认关闭。启用后为目标租户创建独立路由，既有 `CENTER_CASH` 路由和待确认订单仍按原渠道处理。
+
+入账、库存扣减和履约结果在同一事务提交。工作租约过期后按原操作恢复。该通道的能力范围为中心钱包入账与查询，外部现金支付和渠道冲正各自需要已确认的渠道与业务规则。

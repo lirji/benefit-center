@@ -2,10 +2,13 @@ package com.lrj.benefit.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lrj.benefit.adapters.channel.CenterWalletCashAdapter;
+import com.lrj.benefit.application.port.in.CatalogAdminUseCase;
 import com.lrj.benefit.application.port.in.ExecuteFulfillmentUseCase;
 import com.lrj.benefit.application.port.in.ExecuteRemediationUseCase;
 import com.lrj.benefit.application.service.BenefitApplicationException;
 import com.lrj.benefit.contract.*;
+import com.lrj.benefit.domain.model.InventoryOwnerType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "benefit.security.dev-mode=true",
+        "benefit.channel.center-wallet-cash-enabled=true",
         "benefit.worker.enabled=false",
         "benefit.outbox.enabled=false"
 })
@@ -41,6 +46,7 @@ class AwardOrderEndToEndTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired ExecuteFulfillmentUseCase fulfillment;
+    @Autowired CatalogAdminUseCase catalogAdmin;
     @Autowired ExecuteRemediationUseCase remediation;
 
     @BeforeEach
@@ -121,6 +127,77 @@ class AwardOrderEndToEndTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bc_award_ledger_entry", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT available FROM bc_inventory_account WHERE account_id='Q-CODE'",
                 Long.class)).isEqualTo(9L);
+    }
+
+    @Test
+    void creditsCenterWalletExactlyOnceAfterDispatchLeaseExpires() throws Exception {
+        jdbc.update("""
+                INSERT INTO bc_benefit_sku
+                (tenant_id,sku_id,benefit_type,currency,face_value_minor,status,version,validity_type,relative_days)
+                VALUES ('T1','CASH-WALLET','CASH','CNY',100,'ACTIVE',0,'RELATIVE',30)
+                """);
+        jdbc.update("""
+                INSERT INTO bc_sku_template_version
+                (tenant_id,sku_id,benefit_type,currency,face_value_minor,status,version,validity_type,
+                 relative_days,created_at)
+                VALUES ('T1','CASH-WALLET','CASH','CNY',100,'ACTIVE',0,'RELATIVE',30,CURRENT_TIMESTAMP)
+                """);
+        catalogAdmin.saveRoute("T1", new CatalogAdminUseCase.RouteCommand("R-WALLET", "CASH-WALLET", 1,
+                CenterWalletCashAdapter.CHANNEL_CODE, InventoryOwnerType.CENTER_QUOTA, null, "LAZY",
+                true, null, null));
+        jdbc.update("""
+                INSERT INTO bc_inventory_account
+                (tenant_id,account_id,sku_id,owner_type,owner_id,available,reserved,issued,version)
+                VALUES ('T1','Q-WALLET','CASH-WALLET','CENTER_QUOTA','platform',3,0,0,0)
+                """);
+        AwardIntent intent = new AwardIntent("1.0", "drools", "REQ-CASH", "ORDER-CASH", "recipient:cash", null,
+                PartialPolicy.BEST_EFFORT, List.of(new AwardItemIntent("cash", "CASH-WALLET", BenefitType.CASH,
+                        100L, "CNY", 1, Map.of())), Map.of());
+        String body = json.writeValueAsString(intent);
+        String response = mvc.perform(post("/openapi/v1/award-orders")
+                        .header("X-Tenant-Id", "T1").header("Idempotency-Key", "REQ-CASH")
+                        .contentType("application/json").content(body))
+                .andExpect(status().isAccepted())
+                .andReturn().getResponse().getContentAsString();
+        String orderNo = json.readTree(response).path("awardOrderNo").asText();
+
+        // 模拟工作进程在履约事务提交前退出。新租约查询原操作，钱包只能入账一次。
+        jdbc.update("UPDATE bc_award_item SET status='DISPATCHING',version=version+1");
+        jdbc.update("""
+                UPDATE bc_fulfillment_operation
+                SET status='DISPATCHING',lease_owner='dead-worker',lease_until=?,version=version+1
+                """, Timestamp.from(Instant.EPOCH));
+        assertThat(fulfillment.runBatch("T1", 10, "replacement-worker").succeeded()).isEqualTo(1);
+        assertThat(fulfillment.runBatch("T1", 10, "next-worker").claimed()).isZero();
+
+        mvc.perform(post("/openapi/v1/award-orders")
+                        .header("X-Tenant-Id", "T1").header("Idempotency-Key", "REQ-CASH")
+                        .contentType("application/json").content(body))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.awardOrderNo").value(orderNo))
+                .andExpect(jsonPath("$.replay").value(true));
+        mvc.perform(get("/openapi/v1/award-orders/{orderNo}", orderNo).header("X-Tenant-Id", "T1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
+                .andExpect(jsonPath("$.items[0].walletEntryId").isNotEmpty());
+        mvc.perform(get("/admin/v1/wallets/{subjectRef}", "recipient:cash").header("X-Tenant-Id", "T1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalEntries").value(1))
+                .andExpect(jsonPath("$.cashBalances[0].currency").value("CNY"))
+                .andExpect(jsonPath("$.cashBalances[0].balanceMinor").value(100));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bc_wallet_balance_ledger", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bc_fulfillment_operation", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT issued FROM bc_inventory_account WHERE account_id='Q-WALLET'",
+                Long.class)).isEqualTo(1L);
+    }
+
+    @Test
+    void rejectsCenterWalletCashRouteForNonCashSku() {
+        var route = new CatalogAdminUseCase.RouteCommand("R-WALLET-INVALID", "CODE-10", 2,
+                CenterWalletCashAdapter.CHANNEL_CODE, InventoryOwnerType.CENTER_QUOTA, null, "LAZY",
+                true, null, null);
+        assertThatThrownBy(() -> catalogAdmin.saveRoute("T1", route))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

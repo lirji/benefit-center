@@ -84,6 +84,12 @@ public class BenefitCenterConfiguration {
     @Bean CenterCodeAdapter centerCodeAdapter(CodeAssetRepository repository) {
         return new CenterCodeAdapter(repository);
     }
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            name = "benefit.channel.center-wallet-cash-enabled", havingValue = "true")
+    CenterWalletCashAdapter centerWalletCashAdapter() {
+        return new CenterWalletCashAdapter();
+    }
     @Bean PhysicalFulfillmentAdapter physicalFulfillmentAdapter(PhysicalFulfillmentRepository repository) {
         return new PhysicalFulfillmentAdapter(repository);
     }

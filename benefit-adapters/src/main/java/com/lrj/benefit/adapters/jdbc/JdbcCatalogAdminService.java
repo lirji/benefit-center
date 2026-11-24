@@ -4,6 +4,7 @@ import com.lrj.benefit.application.port.in.CatalogAdminUseCase;
 import com.lrj.benefit.application.port.in.WorkflowSkuApprovalUseCase;
 import com.lrj.benefit.application.port.out.IdGenerator;
 import com.lrj.benefit.application.port.out.InboxRepository;
+import com.lrj.benefit.adapters.channel.CenterWalletCashAdapter;
 import com.lrj.benefit.application.port.out.ChannelAdapterRegistry;
 import com.lrj.benefit.application.port.out.UnitOfWork;
 import com.lrj.benefit.application.port.out.SkuTemplateCache;
@@ -401,6 +402,13 @@ public final class JdbcCatalogAdminService implements CatalogAdminUseCase, Workf
             if (skuExists == null || skuExists != 1) throw new IllegalArgumentException("route SKU does not exist");
             if (command.enabled()) {
                 adapters.required(command.channelCode());
+                // 钱包现金只能走中心配额，避免把外部渠道库存或非现金模板当成余额。
+                if (CenterWalletCashAdapter.CHANNEL_CODE.equals(command.channelCode())
+                        && (command.ownerType() != InventoryOwnerType.CENTER_QUOTA
+                        || catalog.findSku(tenantId, command.skuId())
+                                .filter(sku -> sku.type() == BenefitType.CASH).isEmpty())) {
+                    throw new IllegalArgumentException("中心钱包现金通道要求现金 SKU 和中心配额");
+                }
                 if (command.fallbackRouteId() != null) {
                     Integer fallbackExists = jdbc.queryForObject("""
                             SELECT COUNT(*) FROM bc_channel_route

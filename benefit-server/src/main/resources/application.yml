@@ -42,6 +42,8 @@ benefit:
   cell:
     id: ${BENEFIT_CELL_ID:cell-0}
   channel:
+    # 仅注册中心钱包余额通道。租户仍需配置审核后的现金 SKU 和专用路由。
+    center-wallet-cash-enabled: ${BENEFIT_CENTER_WALLET_CASH_ENABLED:false}
     # 双开关防误连：全局生产渠道总闸和具体 HTTP adapter 必须同时为 true。
     real-enabled: ${BENEFIT_REAL_CHANNEL_ENABLED:false}
     http:
