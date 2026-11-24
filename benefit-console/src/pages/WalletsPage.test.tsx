@@ -13,9 +13,6 @@ vi.mock('../api/benefit', () => ({
   commandWalletEntry: vi.fn(),
 }))
 
-// 表格查询和抽屉渲染在 CI 上可能超过普通单步用例的时限。
-const walletInteractionTimeoutMs = 15_000
-
 const unusedEntry: WalletEntryView = {
   entryId: 'WE-1',
   subjectRef: 'user-1',
@@ -85,7 +82,7 @@ describe('WalletsPage', () => {
     const drawer = within(await screen.findByRole('dialog', { name: '券包条目' }))
     expect(drawer.getByRole('button', { name: '冻结' })).toBeInTheDocument()
     expect(drawer.getByRole('button', { name: '核销' })).toBeInTheDocument()
-  }, walletInteractionTimeoutMs)
+  })
 
   it('hides wallet commands without benefit.admin', async () => {
     vi.mocked(getWallet).mockResolvedValue({
@@ -102,5 +99,5 @@ describe('WalletsPage', () => {
     const drawer = within(await screen.findByRole('dialog', { name: '券包条目' }))
     expect(drawer.queryByRole('button', { name: '冻结' })).not.toBeInTheDocument()
     expect(drawer.queryByRole('button', { name: '核销' })).not.toBeInTheDocument()
-  }, walletInteractionTimeoutMs)
+  })
 })
