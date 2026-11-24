@@ -31,6 +31,9 @@ async function mockApi(page: Page) {
         },
       ])
     }
+    if (url.pathname === '/admin/v1/skus/SKU-PENDING/approval-runtime') {
+      return json({ instancePresent: true, definitionStatus: 'DEPLOYED', processInstanceId: 'pi-1' })
+    }
     if (url.pathname.endsWith('/entries') && url.pathname.includes('/admin/v1/wallets/')) {
       return json([{
         entryId: 'WE-1',

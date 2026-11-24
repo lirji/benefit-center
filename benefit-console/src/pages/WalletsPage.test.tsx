@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
@@ -12,6 +12,9 @@ vi.mock('../api/benefit', () => ({
   listWalletEntries: vi.fn(),
   commandWalletEntry: vi.fn(),
 }))
+
+// 表格查询和抽屉渲染在 CI 上可能超过普通单步用例的时限。
+const walletInteractionTimeoutMs = 15_000
 
 const unusedEntry: WalletEntryView = {
   entryId: 'WE-1',
@@ -79,9 +82,10 @@ describe('WalletsPage', () => {
     await userEvent.type(screen.getByPlaceholderText(/用户稳定引用/), 'user-1')
     await userEvent.click(screen.getByRole('button', { name: '查询' }))
     await userEvent.click(await screen.findByRole('button', { name: '详情' }))
-    expect(await screen.findByRole('button', { name: '冻结' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '核销' })).toBeInTheDocument()
-  })
+    const drawer = within(await screen.findByRole('dialog', { name: '券包条目' }))
+    expect(drawer.getByRole('button', { name: '冻结' })).toBeInTheDocument()
+    expect(drawer.getByRole('button', { name: '核销' })).toBeInTheDocument()
+  }, walletInteractionTimeoutMs)
 
   it('hides wallet commands without benefit.admin', async () => {
     vi.mocked(getWallet).mockResolvedValue({
@@ -95,8 +99,8 @@ describe('WalletsPage', () => {
     await userEvent.type(screen.getByPlaceholderText(/用户稳定引用/), 'user-1')
     await userEvent.click(screen.getByRole('button', { name: '查询' }))
     await userEvent.click(await screen.findByRole('button', { name: '详情' }))
-    expect(await screen.findByRole('dialog', { name: '券包条目' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '冻结' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '核销' })).not.toBeInTheDocument()
-  })
+    const drawer = within(await screen.findByRole('dialog', { name: '券包条目' }))
+    expect(drawer.queryByRole('button', { name: '冻结' })).not.toBeInTheDocument()
+    expect(drawer.queryByRole('button', { name: '核销' })).not.toBeInTheDocument()
+  }, walletInteractionTimeoutMs)
 })
